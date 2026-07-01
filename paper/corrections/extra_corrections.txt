@@ -1,0 +1,11 @@
+- Baseline quedó entrenado. Tengo el modelo sin KD y con KD usando como peso relativo 0.1 para ese término. Sin KD funcionó muy bien... KD con esa ponderación dio los mismo problemas que antes.
++ Ahora la pregunta importante es, la distillation realmente aporta algo más allá de entrenar un modelo más pequeño? Si la perfo es similar o mejor pero las explicaciones difieren puede haber algo ahí a analizar.
+
+- Del punto de explicabilidad, ok reviso cómo se haría eso.
+
+- El punto 3 no lo entendí mucho.
++ Lo que quería decir es que si S2 clasifica mejor, pero no necesariamente es el que más se parece al profesor. Eso rompe una intuición bastante común de que lo más parecido debería rendir mejor. A menos que recuerde mal o esté confundida, tus resultados sugieren que una cosa es mejor desempeño y otra es mayor similitud representacional.
+
+- Punto 4, subpunto 2. Decís para algunos casos puntuales del dataset? O qué promedios? O comparación de las head del estudiante con la head individual del profesor? Consulto porque tengo promedios en varias cosas y no se si te entendí bien.
++ No me refería a casos puntuales. Tenés muchos resultados promediados y sabemos que los promedios ocultan cosas. Estaba pensando en algo del estilo: comparar head_i del profesor con head_j del estudiante, construir una matriz de similitud, y ver cuáles heads sobreviven/desaparecen. Capaz un heatmap simplemente?
+Capaz para todos los ejemplos es un montón, pero capaz no sé promediando las matrices de atención de muchos ejemplos (no todos, pero si muchos para que sea más estabel que elegir un subconjunto representativo -cómo sabemos que es representativo, no?-)

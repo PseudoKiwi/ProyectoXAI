@@ -3,10 +3,12 @@ import glob
 import os
 
 HF_USERNAME = "Pseudokiwi"
-DATASET = "imdb"
+DATASET = "agnews"
 REPO_NAME = f"Proyecto_XAI_checkpoints_{DATASET}"
 REPO_ID = f"{HF_USERNAME}/{REPO_NAME}"
-CHECKPOINTS_DIR = f"../checkpoints/{DATASET}"
+CHECKPOINTS_DIR = f"checkpoints/{DATASET}"
+
+print(CHECKPOINTS_DIR)
 
 login()
 

@@ -1,0 +1,119 @@
+\begin{thebibliography}{10}
+
+\bibitem{abnar2020quantifying}
+Samira Abnar and Willem Zuidema.
+\newblock Quantifying attention flow in transformers.
+\newblock In {\em Proceedings of the 58th annual meeting of the association for
+  computational linguistics}, pages 4190--4197, 2020.
+
+\bibitem{anthropic2025claude}
+{Anthropic}.
+\newblock Claude sonnet 4.6 {[Large language model]}.
+\newblock \url{https://www.anthropic.com}, 2025.
+\newblock Used as a generative AI tool for language editing and writing
+  assistance.
+
+\bibitem{bengio2003neural}
+Yoshua Bengio, R{\'e}jean Ducharme, Pascal Vincent, and Christian Jauvin.
+\newblock A neural probabilistic language model.
+\newblock {\em Journal of machine learning research}, 3(Feb):1137--1155, 2003.
+
+\bibitem{daillm}
+Shenghong Dai, Shubham Mehrotra, Shiva~Kumar Pentyala, Yingchi Liu, Suman
+  Banerjee, James Zhu, Bin Bi, and Sitaram Asur.
+\newblock Llm as a classifier: Leveraging large language models for text and
+  vision classification.
+\newblock arXiv preprint arXiv:2311.17782, 2024.
+
+\bibitem{gou2021knowledge}
+Jianping Gou, Baosheng Yu, Stephen~J Maybank, and Dacheng Tao.
+\newblock Knowledge distillation: A survey.
+\newblock {\em International journal of computer vision}, 129(6):1789--1819,
+  2021.
+
+\bibitem{hinton2015distilling}
+Geoffrey Hinton, Oriol Vinyals, and Jeff Dean.
+\newblock Distilling the knowledge in a neural network.
+\newblock {\em arXiv preprint arXiv:1503.02531}, 2015.
+
+\bibitem{jain2019attention}
+Sarthak Jain and Byron~C Wallace.
+\newblock Attention is not explanation.
+\newblock In {\em Proceedings of the 2019 Conference of the North American
+  Chapter of the Association for Computational Linguistics: Human Language
+  Technologies, Volume 1 (Long and Short Papers)}, pages 3543--3556, 2019.
+
+\bibitem{lin1991divergence}
+Jianhua Lin.
+\newblock Divergence measures based on the shannon entropy.
+\newblock {\em IEEE Transactions on Information theory}, 37(1):145--151, 1991.
+
+\bibitem{lopez2019imdb}
+Beatrice Lopez and X~Sumba.
+\newblock Imdb sentiment analysis, 2019.
+
+\bibitem{lundberg2017unified}
+Scott~M Lundberg and Su-In Lee.
+\newblock A unified approach to interpreting model predictions.
+\newblock {\em Advances in neural information processing systems}, 30, 2017.
+
+\bibitem{openai_chatgpt}
+{OpenAI}.
+\newblock Chatgpt.
+\newblock \url{https://chat.openai.com}, 2026.
+\newblock Used as a generative AI tool for language editing and writing
+  assistance.
+
+\bibitem{recanatesi2022scale}
+Stefano Recanatesi, Serena Bradde, Vijay Balasubramanian, Nicholas~A Steinmetz,
+  and Eric Shea-Brown.
+\newblock A scale-dependent measure of system dimensionality.
+\newblock {\em Patterns}, 3(8), 2022.
+
+\bibitem{ribeiro2016should}
+Marco~Tulio Ribeiro, Sameer Singh, and Carlos Guestrin.
+\newblock "why should i trust you?" explaining the predictions of any
+  classifier.
+\newblock In {\em Proceedings of the 22nd ACM SIGKDD international conference
+  on knowledge discovery and data mining}, pages 1135--1144, 2016.
+
+\bibitem{roy2007effective}
+Olivier Roy and Martin Vetterli.
+\newblock The effective rank: A measure of effective dimensionality.
+\newblock In {\em 2007 15th European signal processing conference}, pages
+  606--610. IEEE, 2007.
+
+\bibitem{cerebras2023slimpajama}
+Daria Soboleva, Faisal Al-Khateeb, Robert Myers, Jacob~R Steeves, Joel
+  Hestness, and Nolan Dey.
+\newblock {SlimPajama: A 627B token cleaned and deduplicated version of
+  RedPajama}.
+\newblock
+  \url{https://cerebras.ai/blog/slimpajama-a-627b-token-cleaned-and-deduplicated-version-of-redpajama},
+  2023.
+
+\bibitem{sundararajan2017axiomatic}
+Mukund Sundararajan, Ankur Taly, and Qiqi Yan.
+\newblock Axiomatic attribution for deep networks.
+\newblock In {\em International conference on machine learning}, pages
+  3319--3328. PMLR, 2017.
+
+\bibitem{vaswani2017attention}
+Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones,
+  Aidan~N Gomez, {\L}ukasz Kaiser, and Illia Polosukhin.
+\newblock Attention is all you need.
+\newblock {\em Advances in neural information processing systems}, 30, 2017.
+
+\bibitem{wiegreffe2019attention}
+Sarah Wiegreffe and Yuval Pinter.
+\newblock Attention is not not explanation.
+\newblock In {\em Proceedings of the 2019 conference on empirical methods in
+  natural language processing and the 9th international joint conference on
+  natural language processing (EMNLP-IJCNLP)}, pages 11--20, 2019.
+
+\bibitem{zhang2024tinyllama}
+Peiyuan Zhang, Guangtao Zeng, Tianduo Wang, and Wei Lu.
+\newblock Tinyllama: An open-source small language model.
+\newblock {\em arXiv preprint arXiv:2401.02385}, 2024.
+
+\end{thebibliography}
