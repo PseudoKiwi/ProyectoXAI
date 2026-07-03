@@ -3,17 +3,19 @@
 \usepackage{cite}
 \ifCLASSINFOpdf
  \usepackage[pdftex]{graphicx}
- \graphicspath{{./images/}}
+ \graphicspath{{./images/}{./svg-inkscape/}}
  \DeclareGraphicsExtensions{.pdf,.jpeg,.png}
 \else
 \fi
 \usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{mathtools}
+\usepackage{multirow}
 \newcommand{\argmax}{\operatorname*{argmax}}
 \usepackage{array}
 \usepackage{url}
 \usepackage{hyperref}
 \hyphenation{op-tical net-works semi-conduc-tor}
-\usepackage{svg}
 \usepackage{listings}
 \usepackage{xcolor}
 \usepackage{subcaption}
@@ -31,7 +33,7 @@
 
 \author{
 \IEEEauthorblockN{Martín Perciante}
-\IEEEauthorblockA{Universidad Católica del Uruguay\\ Montevideo,Uruguay\\\href{mailto:tincho.perciante@gmail.com
+\IEEEauthorblockA{Universidad Católica del Uruguay\\ Montevideo, Uruguay\\\href{mailto:tincho.perciante@gmail.com
 }{tincho.perciante@gmail.com}}}
 
 \begin{document}
@@ -39,7 +41,7 @@
 \maketitle
 
 \begin{abstract}
-Knowledge distillation is often evaluated in terms of functional similarity between teacher and student models, typically measured through predictive performance. However, it remains unclear whether this functional similarity also implies the preservation of internal representations and explanatory mechanisms. This work investigates this question in autoregressive Transformer-based models. To this end, a TinyLlama teacher model is distilled into two shallower student models on a generative sentiment classification task, varying the loss function used during training. Internal representations are compared through attention map metrics, spectral analysis, and post-hoc explainability techniques, including \textbf{LIME}, \textbf{SHAP}, and \textbf{Integrated Gradients}. The results show that distillation does not transfer the teacher's explanatory mechanisms, as both students assign importance to tokens lacking sentiment-related content, regardless of their classification performance. Regarding internal representations, a partial transfer of structure is observed in the first-layer attention maps, with Frobenius distances below $2\%$ of the theoretical maximum bound, whereas intermediate and deeper layers exhibit substantial divergences. At a global level, the students attention \textit{rollout} displays high similarity to the teacher's average attention patterns, although this finding requires careful interpretation. Across all analyses, both student models exhibit nearly identical behavior, suggesting that the observed patterns arise from the distillation process itself rather than from the additional $KL$ term applied to class-specific tokens to preserve the logits \textit{argmax}. The absence of a non-distilled baseline prevents definitive conclusions; nevertheless, the empirical results are consistent with the existence of a partial inheritance of internal structure induced by knowledge distillation.
+Knowledge distillation is often evaluated in terms of functional similarity between teacher and student models, typically measured through predictive performance. However, it remains unclear whether this functional similarity also implies the preservation of internal representations and explanatory mechanisms, or whether it is simply a consequence of training a smaller model on the same task. This work investigates this question in autoregressive Transformer-based models. A TinyLlama teacher is distilled by depth into a family of $11$-layer students spanning a full non-distilled baseline, a weakly-distilled variant, a standard-KD variant, and a class-restricted-KD variant, isolating the effect of distillation strength from that of depth reduction alone. Internal representations are compared through layer-wise and global attention-map metrics, spectral analysis, per-head similarity, and linear CKA on hidden states, while explanatory mechanisms are evaluated through \textbf{LIME}, \textbf{SHAP}, and \textbf{Integrated Gradients} (using a zero-vector baseline), moving beyond qualitative examples to systematic, aggregate agreement and faithfulness metrics computed over held-out samples. The study is conducted first as a pilot on binary IMDb sentiment classification and then, as the main experiment, on the four-class, non-binary AG News topic classification task. The results show that distillation does not transfer the teacher's explanatory mechanisms, as all students assign non-trivial importance to tokens lacking task-relevant content, regardless of classification performance. Regarding internal representations, a partial transfer of structure is observed in the first attention layer, with Frobenius distances below $2\%$ of the theoretical maximum bound, whereas intermediate and deeper layers diverge substantially; critically, the non-distilled baseline is often as similar to the teacher's attention and hidden-state representations as the distilled students are, indicating that much of this partial similarity is attributable to shared architecture and task rather than to distillation itself. Distillation's most robust, reproducible effect across both datasets is instead to pull the student's output distribution toward the teacher's, largely independent of whether it improves classification accuracy. Taken together, these results indicate that classification performance, distributional similarity, explanatory alignment, and representational alignment are largely dissociable properties of a distilled model.
 \end{abstract}
 
 \section{Introduction}
@@ -51,78 +53,133 @@ To reduce these costs, several model compression techniques have been proposed, 
 
 Although distillation aims to preserve the functional behavior of the original model, it remains unclear to what extent the teacher's internal representations and explanatory mechanisms emerge or are reconstructed in the student as a consequence of enforcing similarity in the output distributions. In particular, it is natural to ask whether properties associated with attention mechanisms and prediction explanations are preserved throughout the compression process.
 
-The objective of this work is to investigate the relationship between functional similarity and representational similarity in Transformer models compressed through knowledge distillation. To this end, we consider a generative classification problem \cite{daillm} in which the target classes correspond to single tokens in the teacher model's vocabulary. Within this setting, we analyze and compare both internal representations and explanatory mechanisms of the teacher and student models. The motivation for this study stems from the work of \cite{jain2019attention}, which shows that multiple attention configurations can induce similar predictions, thereby challenging the interpretation of attention as a faithful explanation of model behavior. In this context, we investigate whether enforcing functional similarity through logit-based knowledge distillation is sufficient to induce similarity in the internal representations and attention mechanisms of teacher and student models.
+The objective of this work is to investigate the relationship between functional similarity and representational similarity in Transformer models compressed through knowledge distillation, and, critically, to disentangle how much of that relationship is due to distillation itself as opposed to simply training a smaller model on the same task. To this end, we consider a generative classification problem \cite{daillm} in which the target classes correspond to single tokens in the teacher model's vocabulary. Within this setting, we analyze and compare both internal representations and explanatory mechanisms of the teacher and a family of student models spanning a non-distilled baseline, a weakly-distilled variant, and two distilled variants of increasing fidelity. The motivation for this study stems from the work of \cite{jain2019attention}, which shows that multiple attention configurations can induce similar predictions, thereby challenging the interpretation of attention as a faithful explanation of model behavior. In this context, we investigate whether enforcing functional similarity through logit-based knowledge distillation is sufficient to induce similarity in the internal representations and attention mechanisms of teacher and student models, beyond what a non-distilled model of the same reduced architecture would already exhibit.
 
-The study combines two complementary levels of analysis. First, we examine properties of internal representations through techniques applied to the model's attention maps. To this end, attention similarity metrics are employed, including cosine similarity, Jensen--Shannon ($JS$) divergence, and matrix norms. In addition, a spectral analysis of the attention maps is performed to characterize and compare their structural properties.
+The study combines two complementary levels of analysis. First, we examine properties of internal representations through techniques applied to the model's attention maps. To this end, attention similarity metrics are employed, including cosine similarity, Jensen--Shannon ($JS$) divergence, and matrix norms, both at the layer-averaged level and at the level of individual attention heads. In addition, a spectral analysis of the attention maps is performed to characterize and compare their structural properties, and linear Centered Kernel Alignment (CKA) is used to compare hidden-state representations directly, beyond attention alone.
 
-Second, we investigate whether the decisions produced by the student model can be explained in a manner similar to those of the teacher by using post-hoc XAI techniques such as \textbf{LIME} and \textbf{SHAP}, comparing the relevance assigned to different input tokens and features. Gradient-based approaches, including \textbf{Integrated Gradients}, are also employed to study the sensitivity of model predictions with respect to the input. This analysis further enables the evaluation of the explanatory consistency of the student's decisions.
+Second, we investigate whether the decisions produced by the student model can be explained in a manner similar to those of the teacher by using post-hoc XAI techniques such as \textbf{LIME} and \textbf{SHAP}, comparing the relevance assigned to different input tokens and features. Gradient-based approaches, including \textbf{Integrated Gradients} with a zero-vector baseline, are also employed to study the sensitivity of model predictions with respect to the input. Rather than relying solely on qualitative single-example comparisons, we complement these with systematic, aggregate agreement metrics computed over a held-out sample, quantifying top-$k$ attribution overlap, rank and value correlation, sign agreement, deletion-based faithfulness, and explanation stability.
 
-The generated explanations are primarily intended for the technical analysis of models by researchers and practitioners, with the goal of understanding which internal properties emerge under knowledge distillation beyond predictive performance alone. In this way, the present work seeks to provide empirical evidence regarding the extent to which preserving output distributions induces the preservation of internal representations and explanatory mechanisms in compressed models.
+The generated explanations are primarily intended for the technical analysis of models by researchers and practitioners, with the goal of understanding which internal properties emerge under knowledge distillation beyond predictive performance alone. In this way, the present work seeks to provide empirical evidence regarding the extent to which preserving output distributions induces the preservation of internal representations and explanatory mechanisms in compressed models. The full analysis is first conducted as a pilot study on binary IMDb sentiment classification, and then, as the main experiment, extended to the four-class, non-binary AG News topic classification task.
 
-\section{Theoretical Background}
+In summary, this work makes the following contributions:
+\begin{itemize}
+    \item We design a controlled distillation setting for autoregressive generative classification, compressing a TinyLlama-1.1B teacher by depth into randomly initialized $11$-layer students, enabling a direct layer-wise correspondence between teacher and student attention blocks.
+    \item We introduce a family of four student variants sharing a single parameterized loss function but spanning a non-distilled baseline, a weakly-distilled variant, a standard global-$KD$ variant, and a class-restricted $KD$ variant that explicitly addresses the failure of standard vocabulary-level distillation to preserve the $\argmax$ relevant to the classification task -- allowing us to disentangle the effect of distillation strength from that of depth reduction alone.
+    \item We propose a multi-level representational comparison framework, combining layer-wise and global attention analyses (cosine similarity, Frobenius distance, Jensen--Shannon divergence, spectral effective-rank measures), per-head attention similarity, and linear CKA on hidden states, to quantify structural similarity between teacher and student models beyond simple attention averages.
+    \item We move from qualitative to systematic explanation comparison, evaluating \textbf{LIME}, \textbf{SHAP}, and \textbf{Integrated Gradients} with aggregate top-$k$ overlap, rank/value correlation, sign agreement, faithfulness, and stability metrics, providing quantitative evidence on whether the functional similarity induced by distillation extends to explanatory consistency.
+    \item We extend the full analysis from an initial binary pilot study (IMDb) to a four-class, non-binary main study (AG News), testing whether the observed patterns generalize beyond a single, simple classification task.
+\end{itemize}
 
-\subsection{Transformer-Based Autoregressive Models}
-
-Autoregressive language models constitute a family of probabilistic models designed to predict text sequences by modeling the probability of a token conditioned on the preceding tokens. Given an input sequence $x_1, x_2, ..., x_n$, these models approximate the joint language distribution through an autoregressive decomposition into conditional probabilities, as shown below.
-
-\[
-P(x_1, x_2, ..., x_n)
-=
-\prod_{t=1}^{n}
-P(x_t \mid x_{<t})
-\]
-
-where the prediction of each token depends exclusively on the preceding context. This paradigm enables iterative text generation by selecting the next token at each step according to the probability distribution learned by the model \cite{bengio2003neural}.
-
-Currently, most large-scale language models are based on the Transformer architecture introduced in \cite{vaswani2017attention}. In particular, models such as GPT, LLaMA, Claude, and Mistral employ \textit{decoder-only} variants, in which processing is performed through causal self-attention mechanisms. This constraint ensures that each token can only access information from previous positions in the sequence, thereby preserving the autoregressive behavior of the model.
-
-The Transformer architecture replaces traditional recurrent mechanisms with blocks composed primarily of attention mechanisms, residual connections, and feed-forward neural networks. Attention enables the model to assign different levels of relevance to input tokens, facilitating the capture of both local and long-range dependencies within text. In autoregressive models, this mechanism is implemented causally, preventing a token from attending to future positions during inference.
-
-Modern language models typically consist of multiple Transformer blocks stacked sequentially, allowing progressively more abstract representations of the input text to be constructed. Each block incorporates multi-head attention mechanisms, where different attention heads may specialize in specific linguistic patterns, syntactic relationships, or semantic dependencies. This hierarchical organization has proven highly effective for complex natural language processing tasks.
-
-In addition to text generation, autoregressive models can be adapted to classification tasks through an approach known as \textit{generative classification} \cite{daillm}. In this paradigm, the classification problem is reformulated as a constrained generation task, in which the model is required to produce a token or sequence of tokens corresponding to a predefined class. Unlike architectures specifically designed for classification, where the final layer is typically replaced by a classifier adapted to the number of classes, generative classification preserves the model's original vocabulary space, and predictions are obtained from the logits associated with the target classes.
-
-This approach offers several methodological advantages for the present work. By preserving the model's original generative architecture, it becomes possible to study internal mechanisms such as attention maps, activations, and probability distributions without substantially modifying the structure of the teacher model. Furthermore, it enables distillation procedures to be applied directly to full vocabulary distributions, maintaining consistency with the original training objective of language models.
+\section{Related Work}\label{sec:related-work}
 
 \subsection{Knowledge Distillation}
 
-Knowledge distillation is a model compression technique whose objective is to transfer information from a high-capacity model, referred to as the teacher, to a smaller or more efficient model, referred to as the student \cite{hinton2015distilling}. This approach seeks to reduce the computational requirements associated with training and inference while preserving part of the performance achieved by large-scale models.
+Knowledge distillation (KD) is a model compression technique whose objective is to transfer information from a high-capacity model, referred to as the teacher, to a smaller or more efficient model, referred to as the student \cite{hinton2015distilling}. In its traditional formulation, the student is trained not only on the ground-truth labels of the dataset, but also on the probability distributions produced by the teacher. These distributions contain additional information about relationships between classes, model uncertainty, and implicit semantic similarities that conventional discrete labels do not provide. Knowledge transfer is typically implemented through a combination of a standard \textit{cross-entropy} term and a Kullback--Leibler ($KL$) divergence term that measures the discrepancy between the student and teacher distributions, often softened with a distillation temperature $T$ so that relationships among non-target classes become more visible to the student \cite{hinton2015distilling}.
 
-In its traditional formulation, distillation consists of training the student not only on the ground-truth labels of the dataset, but also on the probability distributions produced by the teacher. These distributions contain additional information about relationships between classes, model uncertainty, and implicit semantic similarities. For example, in a classification problem, even when one class is correct, the teacher may assign non-negligible probabilities to related classes, thereby providing richer training signals than conventional discrete labels.
+KD has been widely employed in deep neural networks and, more recently, in large language models, where the computational costs associated with training and inference are particularly high. However, existing surveys and applications evaluate the success of distillation almost exclusively in terms of functional metrics, such as accuracy or loss on evaluation datasets \cite{gou2021knowledge}, leaving open whether functional similarity between teacher and student coincides with similarity in their internal representations or in the mechanisms underlying their decisions. In generative language models, classification tasks are additionally often reformulated through \textit{generative classification} \cite{daillm}, in which the target classes correspond to single tokens of the model's own vocabulary rather than to a dedicated classification head. This framing, which we adopt in this work, preserves the model's original architecture and therefore allows internal representations to be compared directly between teacher and student, without the architectural mismatches that a task-specific classification head would introduce.
 
-Knowledge transfer is typically implemented through a combination of a standard \textit{cross-entropy} term and a distribution-matching term based on the Kullback--Leibler ($KL$) divergence. The $KL$ divergence measures the discrepancy between a distribution and a reference distribution and is inherently asymmetric. In the context of distillation, this asymmetry is desirable, since the objective is precisely for the student to approximate the behavior of the teacher, which remains fixed during training.
+\subsection{Explainability of Transformer Models}
 
-To enrich the information being transferred, a distillation temperature $T$ is often applied to the logits of both models before probabilities are computed using the softmax function. Temperatures greater than $T=1$ produce softer distributions, reducing the dominance of the most probable classes and making it possible to observe more subtle relationships among alternatives. This mechanism encourages the student to learn structural decision patterns present in the teacher beyond the final prediction itself. In the limiting case of $T \rightarrow 0$, the distribution collapses to the most probable token, effectively turning the model into a deterministic text generator.
+Post-hoc explainability methods aim to interpret the decisions of already-trained, complex models without modifying their architecture. Model-agnostic approaches such as \textbf{LIME} \cite{ribeiro2016should} and \textbf{SHAP} \cite{lundberg2017unified} treat the model as a black box: \textbf{LIME} locally approximates its behavior with a simpler surrogate model fitted on perturbations of the input, while \textbf{SHAP} assigns an individual contribution to each feature through Shapley values derived from cooperative game theory. Gradient-based methods instead exploit the differentiability of neural networks. Simple \textit{saliency maps} estimate sensitivity from raw gradients, but these can be unstable and suffer from saturation; \textbf{Integrated Gradients} \cite{sundararajan2017axiomatic} addresses this limitation by integrating gradients along a path between a reference baseline and the actual input. In natural language processing, these three families of methods are commonly used to quantify the contribution of individual tokens or words to a model's prediction.
 
-Knowledge distillation has been widely employed in deep neural networks and, more recently, in large language models, where the computational costs associated with training and inference are particularly high. Most existing work evaluates the success of distillation primarily in terms of functional metrics, such as accuracy or loss on evaluation datasets \cite{gou2021knowledge}.
+Beyond post-hoc attribution, Transformer models expose a potentially interpretable internal mechanism through their attention maps, which quantify how each token distributes its attention over other positions in the sequence. Whether these maps constitute a faithful explanation of model behavior remains contested. Jain and Wallace \cite{jain2019attention} show that alternative attention configurations can induce similar predictions, challenging the use of attention as a causal explanation, whereas Wiegreffe and Pinter \cite{wiegreffe2019attention} argue that attention can still provide plausible explanations under appropriate testing conditions. To move beyond the interpretation of individual attention matrices, \textbf{Attention Rollout} \cite{abnar2020quantifying} models the cumulative propagation of information across layers, successively combining attention patterns while accounting for residual connections, and thereby provides a more global characterization of how information flows from input tokens to later representations.
 
-\subsection{Explainable Artificial Intelligence}
+Taken together, this body of work has developed largely independent tools: methods for probing a single model's predictions (\textbf{LIME}, \textbf{SHAP}, \textbf{Integrated Gradients}) and methods for probing its internal mechanisms (attention maps, \textbf{Attention Rollout}), while the distillation literature has focused on whether a student reproduces the teacher's outputs. Whether a student model that closely reproduces a teacher's predictions also reproduces the internal representations and explanatory mechanisms probed by these XAI tools remains, to the best of our knowledge, unexplored. This work addresses that gap by jointly evaluating representational and explanatory consistency between a teacher and its distilled students.
 
-Explainable Artificial Intelligence (XAI) encompasses a set of techniques and methodologies aimed at interpreting, justifying, and understanding the behavior of complex machine learning models. Its primary objective is to provide explanations of how a model arrives at a particular decision, thereby promoting transparency, trust, and interpretability in systems that would otherwise operate as black boxes.
+\section{Experiments}\label{sec:experiments}
 
-The need for explainability is particularly evident in domains where automated decisions have significant consequences, such as healthcare, finance, law, and recommendation systems. In these contexts, achieving high predictive performance is not sufficient; understanding the factors that drive a model's decisions is equally important. More generally, XAI techniques enable the study of the internal mechanisms of complex models, facilitating the analysis of errors, biases, and emergent behaviors.
+\subsection{Experimental Setup}\label{sec:setup}
 
-Explainability methods can be categorized in several ways. A common distinction separates intrinsically interpretable methods from \textit{post-hoc} methods. The former correspond to models whose structure is naturally understandable, whereas the latter seek to generate explanations for already-trained complex models without modifying their original architecture. Since the Transformer models considered in this work are highly complex and contain a large number of parameters, the present study focuses primarily on post-hoc explainability methods.
+The project was developed in \textbf{Python}, due to its widespread adoption within the scientific community and the availability of specialized tools for deep learning and XAI techniques. Model implementation and training were carried out using \textbf{PyTorch}, together with Hugging Face's \textbf{transformers} library for loading and manipulating language models. In addition, \textbf{NumPy} and \textbf{Pandas} were used for data processing and manipulation, \textbf{Matplotlib} for result visualization, \textbf{SciPy} for the rank- and value-correlation statistics used in the aggregate explanation metrics (Section~\ref{sec:metrics}), and the \textbf{lime} and \textbf{shap} libraries for explanatory analysis of model predictions. Finally, \textbf{scikit-learn} was employed to compute performance metrics and evaluate the models on the \textbf{test} dataset.
 
-\subsubsection{Model-Agnostic Methods}
+The teacher model used in this work was \textbf{TinyLlama-1.1B-Chat-v1.0}. This model is an autoregressive Transformer decoder-only architecture \cite{vaswani2017attention} composed of $22$ Transformer layers. Its design aims to preserve a structure similar to larger models from the LLaMA family while significantly reducing the number of parameters and the computational cost associated with training and inference. The model incorporates modern attention mechanisms, RMSNorm normalization, and rotary positional embeddings, following an architecture representative of contemporary language models \cite{zhang2024tinyllama}. The same pretrained teacher checkpoint is fine-tuned independently for each of the two datasets studied in this work (Sections~\ref{sec:setup-imdb} and~\ref{sec:setup-agnews}).
 
-Model-agnostic methods are explainability techniques that do not require access to the internal structure or parameters of a model. Instead, they operate solely by observing the relationship between inputs and outputs, treating the model as an arbitrary prediction function. This property makes them applicable to a wide range of architectures without requiring model-specific modifications.
+To maintain comparability between the internal representations of the teacher and student models, every student architecture used in this work preserves the same embedding configuration, attention mechanisms, and hidden dimensions as the teacher, reducing only the depth of the network. Specifically, the number of Transformer blocks was reduced from $22$ to $11$, resulting in a $2:1$ correspondence between teacher and student blocks and facilitating layer-wise comparisons. This reduced architecture is shared identically by all four student variants introduced below (Section~\ref{sec:loss}); they differ from one another only in their training loss.
 
-One of the most widely used approaches in this category is \textbf{LIME} \cite{ribeiro2016should}. This method seeks to locally approximate the behavior of a complex model using a simpler and more interpretable surrogate model, typically a linear model. To achieve this, perturbations are generated around the original input and the resulting variations in the model output are analyzed, allowing the relative importance of different features to be estimated. In natural language processing tasks, \textbf{LIME} is commonly applied by perturbing words or tokens in a text and observing how their presence or absence affects the prediction.
+\begin{figure}
+\centering
+\def\svgwidth{0.9\linewidth}
+\input{svg-inkscape/architecture_design_svg-tex.pdf_tex}
+\caption{Comparison between the teacher model architecture (left) and the student model architecture (right). The student is initialized entirely with random weights and inherits no parameters from the teacher. Each internal layer of the student has the same size and architecture as the corresponding layers of the teacher.}
+\label{architecture_reduction}
+\end{figure}
 
-Another widely adopted method is \textbf{SHAP} \cite{lundberg2017unified}, which is based on cooperative game theory. \textbf{SHAP} assigns an individual contribution to each input feature through Shapley values, interpreting the prediction as the outcome of cooperation among features. In text-based applications, these values make it possible to estimate how much each word or token contributes to the model's final prediction. Compared with other approaches, \textbf{SHAP} provides desirable theoretical properties such as consistency and additivity, although typically at a higher computational cost.
+When using a generative language model for classification, several challenges arise. First, the natural output of the model corresponds to a distribution over the entire vocabulary, which contains $32000$ tokens in the selected teacher model, whereas the task requires only a small, fixed number of classes. Furthermore, generated tokens do not necessarily coincide with the expected class labels. To address this issue, we verified for each dataset that its classification labels could be represented by a single token in the model vocabulary. During training, the loss function was computed over the complete vocabulary distribution, preserving the model's original autoregressive behavior. However, for classification and evaluation purposes, only the logits associated with the target tokens were considered, and the prediction was interpreted as the class with the highest relative probability among them, regardless of whether these tokens were the most probable tokens in the full vocabulary \cite{daillm}.
 
-\subsubsection{Gradient-Based Methods}
+When working with autoregressive models, the classification problem must be adapted to the generative paradigm used by the model. To achieve this, a base prompt containing a placeholder for the dataset input text was defined, while the expected output consisted of the same prompt concatenated with the target class label. During training, a loss mask was applied so that only the target class token contributed to the loss function. In this way, the model was trained under a generative classification framework restricted to a single target output. This framework, along with all training and evaluation procedures described in the remainder of this subsection, is shared identically by both datasets studied in this work; the specifics of each dataset are described in Sections~\ref{sec:setup-imdb} and~\ref{sec:setup-agnews}.
 
-Gradient-based methods exploit the differentiability of deep neural networks to estimate the influence of input features on model predictions. In general, these techniques evaluate how small changes in the input affect the model output, thereby identifying the components that are most relevant to a particular decision.
+The teacher model corresponds to a language model pretrained for text generation tasks \cite{zhang2024tinyllama}. However, the task considered in this work differs from its original objective. For this reason, a fine-tuning process was performed independently for each dataset, using a single epoch of the corresponding \textbf{train} set, with a \textbf{learning rate} of $2 \times 10^{-5}$, batch size equal to $1$, and the \textbf{AdamW} optimization algorithm. All remaining optimizer parameters were left at their default values. Cross-entropy loss computed over the complete vocabulary was used as the training objective. Fine-tuning was performed over all model parameters.
 
-Among the simplest approaches are \textit{saliency maps}, which are constructed from the gradient of the model output with respect to the input. The magnitude of the gradient can be interpreted as a measure of sensitivity: features whose variations induce substantial changes in the prediction are considered more relevant to the model's decision.
+To avoid overfitting and unnecessary training, \textbf{early stopping} was applied, halting training if model performance failed to improve after $5$ consecutive validation rounds. Validation was performed on random subsets of size $100$ sampled from the \textbf{validation} dataset. During each validation step, training checkpoints were stored to enable recovery from failures, together with the model weights corresponding to the lowest validation loss observed up to that point.
 
-However, raw gradients can be unstable and may suffer from saturation issues, particularly in regions where small changes in the input produce either abrupt or negligible changes in the model output. To address these limitations, \textbf{Integrated Gradients} \cite{sundararajan2017axiomatic} computes attributions by integrating gradients along a continuous path between a reference input (\textit{baseline}) and the actual input.
+Every student model is randomly initialized and trained for $3$ epochs on the \textbf{train} set without applying \textbf{early stopping}. The same batch size and optimization algorithm used for the teacher were retained, while the \textbf{learning rate} was increased to $1 \times 10^{-4}$ because training started from random initialization. The \textbf{validation} set was used solely for checkpointing and for storing the weights corresponding to the best-performing model observed during training.
+
+\subsubsection{Setup: IMDb}\label{sec:setup-imdb}
+
+\begin{lstlisting}
+Review: {input}
+Summary:
+\end{lstlisting}
+
+For this study, we used the IMDb sentiment analysis dataset, which consists of $50000$ balanced movie reviews labeled with positive or negative sentiment \cite{maas-EtAl:2011:ACL-HLT2011}, represented in the model's vocabulary by the single tokens \textit{positive} and \textit{negative}. Since the teacher model has a maximum context window of $2048$ tokens, the dataset inputs were filtered to ensure that the prompt concatenated with the target label did not exceed this limit. The filtered dataset ($49987$ valid examples) was then split into \textbf{train}, \textbf{validation}, and \textbf{test} sets, resulting in final sizes of $22492$, $2500$, and $24995$ examples, respectively.
+
+\subsubsection{Setup: AG News}\label{sec:setup-agnews}
+
+To test whether the findings obtained on IMDb generalize beyond a simple binary sentiment task, we additionally consider \textbf{AG News} \cite{zhang2015character}, a four-class news-topic classification dataset with classes \textit{World}, \textit{Sports}, \textit{Business}, and \textit{Sci/Tech}. As with IMDb, each class label must be representable by a single vocabulary token; the labels \textit{World}, \textit{Sports}, and \textit{Business} already satisfy this, but the tokenizer splits \textit{Sci/Tech} into four sub-tokens (\texttt{\_Sci}, \texttt{/}, \texttt{T}, \texttt{ech}). We therefore relabel this class \textit{Science}, which tokenizes to a single token, purely to preserve the single-token generative-classification framing used throughout this work; no other change is made to the underlying data. The prompt template used is
+
+\begin{lstlisting}
+Article: {input}
+
+Theme:
+\end{lstlisting}
+
+analogous to the IMDb template above. The dataset is class-balanced ($30000$ articles per class in the original training split); we subsample $7500$ examples per class for training ($30000$ total), $25$ per class for validation ($100$ total), and use the full, balanced test split ($1900$ per class, $7600$ total). As with IMDb, inputs are filtered to fit within the teacher's $2048$-token context window; given the shorter length of AG News articles, this filtering removes a negligible number of examples. All remaining training and evaluation hyperparameters (optimizer, learning rates, epochs, early-stopping criterion) are identical to those used for IMDb.
+
+\subsubsection{A Family of Distillation Losses}\label{sec:loss}
+
+The loss function combined a supervised cross-entropy term with a distillation term based on the $KL$ divergence between the teacher and student probability distributions, encouraging both task learning and functional similarity to the teacher. Rather than considering a single student, we train a family of four student variants that share this general parameterized loss but differ in how strongly the distillation terms are weighted, in order to disentangle the effect of the distillation objective from that of depth reduction alone. The general loss is defined as
 
 \[
-\mathrm{IG}_i(x)
+\mathcal{L}
 =
+\alpha\,\mathcal{L}_{CE}
++
+(1-\alpha)\,T^2 D_{KL}(P_P \Vert P_S)
++
+\beta\,T^2 D_{KL}(P_P^{(c)} \Vert P_S^{(c)})
+\]
+
+where $\mathcal{L}_{CE}$ denotes the supervised cross-entropy term, $D_{KL}(P_P \Vert P_S)$ represents the $KL$ divergence between the full-vocabulary probability distributions generated by the teacher ($P_P$) and the student ($P_S$), $P_P^{(c)}$ and $P_S^{(c)}$ denote the probability distributions restricted to the classification-relevant tokens (e.g.\ \textit{positive}/\textit{negative} for IMDb, the four AG News class tokens), and $T$ is the distillation temperature, fixed at $T=2$ throughout (with the distillation terms additionally scaled by $T^2=4$ to preserve gradient magnitudes, following \cite{hinton2015distilling}). The coefficients $\alpha$ and $\beta$ control, respectively, the balance between supervised and global-distillation learning, and the additional weight given to a class-restricted distillation term. Table~\ref{tab:model_family} summarizes the four student variants considered, together with the teacher.
+
+\begin{table}[h!]
+\centering
+\caption{The family of models compared in this work. All four students share the same reduced ($11$-layer) random-initialization architecture and differ only in $(\alpha,\beta)$.}
+\begin{tabular}{|l|c|c|c|l|}
+\hline
+Model & Init. & $\alpha$ & $\beta$ & Description \\ \hline
+$P$ (teacher) & pretrained & -- & -- & fine-tuned, CE only \\
+$B$ (baseline) & random & $1$ & $0$ & no distillation \\
+$S_{bad}$ & random & $0.9$ & $0$ & weak global $KD$ \\
+$S_1$ & random & $0.5$ & $0$ & standard global $KD$ \\
+$S_2$ & random & $0.5$ & $0.25$ & $+$ class-restricted $KD$ \\ \hline
+\end{tabular}
+\label{tab:model_family}
+\end{table}
+
+$B$ is a non-distilled baseline: it is trained with cross-entropy only ($\alpha=1$), with no access to the teacher's outputs during training, and serves to isolate how much of any observed teacher-student similarity is attributable to distillation itself rather than simply to training a smaller model of the same reduced architecture on the same task -- the baseline explicitly requested to disentangle these two effects. $S_{bad}$ is a weakly-distilled variant ($\alpha=0.9$): $90\%$ of its loss is supervised cross-entropy and only $10\%$ is global $KD$, providing an intermediate point between $B$ and standard distillation. $S_1$ and $S_2$ are the original two distilled students: $S_1$ uses only the global $KD$ term ($\alpha=0.5,\beta=0$), while $S_2$ additionally incorporates the class-restricted term described below ($\beta=0.25$).
+
+A limitation emerged from the original distillation objective used by $S_1$. The $KL$ divergence between teacher and student is a global measure over the entire vocabulary distribution. As a consequence, two models may exhibit similar distributions overall without necessarily preserving the relative probability ordering within a specific subset of tokens. In the context of this work, this implies that the most probable class token may differ between teacher and student even when the global distributions are highly similar. To mitigate this issue, $S_2$ additionally incorporates the class-restricted $KL$ term $\beta\,T^2 D_{KL}(P_P^{(c)}\Vert P_S^{(c)})$, computed exclusively over the logits associated with the class tokens and weighted more lightly than the global term so as to act as a complementary regularizer rather than override the distributional information captured by global distillation. Consequently, $S_2$'s optimization objective seeks not only to approximate the full vocabulary distributions between teacher and student, but also to preserve the relative probability ordering of the classes relevant to the classification task.
+
+The fine-tuned teacher and all four student variants were evaluated on the \textbf{test} set of each dataset before comparisons were conducted. This evaluation was performed to verify the correct operation of the models and their expected behavior on the task. Since the problem corresponds to generative classification with a single output token, the models were evaluated using a single forward pass and analyzing the logits of the target classes. This approach is computationally less expensive than using the full generative decoding loop and also avoids generating tokens outside the expected class set. Consequently, the comparison was restricted to the logits associated with the target classes. The final prediction was obtained by selecting the class corresponding to the highest logit among the target tokens. After classifying all examples, the metrics \textit{accuracy}, \textit{precision}, \textit{recall}, \textit{F1-score}, and the confusion matrix were computed.
+
+After verifying the correct operation of the models on the \textbf{test} set, comparisons of outputs and internal representations were performed between the teacher and all four student variants. Functional evaluation was conducted using classical post-hoc XAI methods, namely \textbf{LIME}, \textbf{SHAP}, and \textbf{Integrated Gradients}, with the objective of identifying which words or tokens exert the greatest influence on classification decisions. The resulting explanations were then used to compare the degree of explanatory consistency between the teacher and student models, both qualitatively, on one illustrative example per dataset, and systematically, using the aggregate agreement and faithfulness metrics defined in Section~\ref{sec:metrics}, computed over a held-out sample of $N=100$ test examples per dataset (balanced across classes, fixed random seed).
+
+For \textbf{LIME}, the \textbf{LimeTextExplainer} was used, generating random perturbations of the input text by removing complete words and observing the resulting variations. For \textbf{SHAP}, text masking was employed, producing a similar procedure based on hiding words from the input text. \textbf{Integrated Gradients} was implemented using a zero embedding vector as the baseline and analyzing how different tokens affected the output. Formally, given an input $x$, a baseline $x'$, and the model function $F(\cdot)$ whose prediction is to be explained, \textbf{Integrated Gradients} attributes to each input dimension $i$ the quantity
+
+\[
+\begin{aligned}
+\mathrm{IG}_i(x)
+&=
 (x_i - x_i')
 \int_0^1
 \frac{
@@ -130,14 +187,8 @@ However, raw gradients can be unstable and may suffer from saturation issues, pa
 }{
 \partial x_i
 }
-d\alpha
-\]
-
-where $x$ denotes the actual input, $x'$ the reference input, $F(\cdot)$ the model function whose prediction is to be explained, and $\alpha \in [0,1]$ parameterizes the interpolation path between the two inputs. In practice, the integral is approximated by a discrete summation over multiple interpolated points between the \textit{baseline} and the input.
-
-\[
-\mathrm{IG}_i(x)
-\approx
+d\alpha \\
+&\approx
 (x_i - x_i')
 \frac{1}{m}
 \sum_{k=1}^{m}
@@ -148,25 +199,26 @@ x' + \frac{k}{m}(x-x')
 }{
 \partial x_i
 }
+\end{aligned}
 \]
 
-where $m$ denotes the number of steps used to approximate the integral.
+where $\alpha \in [0,1]$ parameterizes the interpolation path between $x'$ and $x$, and $m$ denotes the number of steps used to approximate the integral in practice \cite{sundararajan2017axiomatic}. Attributions are computed with respect to the input embeddings; for consistency with the other methods, token-level attribution scores were aggregated after reconstructing complete words.
 
-In natural language processing tasks, gradient-based methods make it possible to quantify which tokens have the greatest influence on the probability assigned to specific outputs. In particular, attributions are typically computed with respect to the input embeddings, allowing the relative contribution of each token to the model's prediction to be estimated.
+The output probability distributions of the teacher and each student model were compared at temperatures $T=1$ and $T=2$, considering only the global vocabulary distributions. These temperatures were selected because $T=1$ corresponds to standard inference and $T=2$ was used during distillation training. The objective of this analysis was to assess the probabilistic similarity of the predictions beyond the final predicted label. In this way, the study evaluates the extent to which each model exhibits similar distributional behavior to the teacher, even in cases where their point predictions differ.
 
-\subsubsection{Attention-Based Methods and Internal Representations}
+Comparisons of internal representations focused on similarities and differences in attention mechanisms and hidden states, beyond the importance assigned to individual tokens. Experiments were conducted using three complementary perspectives: a microscopic (granular) analysis, a macroscopic (global) analysis, and a set of finer-grained probes (per-head attention and hidden-state comparisons). The granular approach compared teacher attention blocks with potentially corresponding layers in each student model. More specifically, attention map $i$ of each student was compared with the average attention map obtained from teacher layers $2i$ and $2i+1$; the corresponding attention-rollout comparison is discussed alongside the global comparisons below, where it plays a more prominent role. This comparison is enabled by the $2:1$ architectural relationship between teacher and student models. The global approach focused on comparing the average attention maps and attention rollouts of the complete models. All comparisons were performed on attention maps averaged over held-out samples from the \textbf{test} dataset rather than on individual examples ($N=200$ examples for IMDb, $N=200$ for AG News). At the representational level, the goal was to characterize the average behavior of the models regardless of the analysis scale. Additional comparisons between student models were also conducted to identify common structural patterns. To probe representational similarity at a finer grain than layer-averaged attention, we additionally compare individual attention heads directly (rather than head-averaged maps), over a smaller sample of $N=50$ prompts, and compare full hidden-state representations (rather than only attention) across all layers via linear CKA, over $N=100$ prompts. The specific metrics used to quantify all of these comparisons, together with their formal definitions, are described in Section~\ref{sec:metrics}.
 
-Unlike purely post-hoc methods that explain decisions solely through perturbations or gradients, Transformer models provide potentially interpretable internal mechanisms through \textit{attention maps}. These maps represent how each token distributes its attention across other positions in the sequence during information processing.
+The experiments were conducted using an \textbf{NVIDIA GeForce RTX 5070 Ti} GPU with $16$ GB of \textbf{GDDR7} VRAM. The repository containing the source code and experimental results is available at \textbf{https://github.com/PseudoKiwi/ProyectoXAI}.
 
-For each attention head and layer, self-attention mechanisms generate matrices that quantify dependency relationships between tokens. Intuitively, these matrices make it possible to observe which parts of the input are used to construct internal representations at different stages of processing. Several studies have suggested that specific attention heads may specialize in syntactic patterns, semantic relationships, or contextual dependencies.
+The writing of this manuscript was partially assisted by generative language models used exclusively for stylistic revision and textual reformulation tasks: Claude Sonnet 4.6 \cite{anthropic2025claude} (Anthropic) and ChatGPT \cite{openai_chatgpt} (OpenAI).
 
-Nevertheless, the use of attention as an explanatory mechanism remains a matter of debate \cite{jain2019attention, wiegreffe2019attention}. Some authors argue that attention does not necessarily provide a causal explanation of model behavior, since the final representations also depend on feed-forward components, residual connections, and intermediate normalization layers. As a result, the direct interpretation of individual attention maps may be insufficient to fully characterize the decision-making process.
-
-To address this limitation, techniques such as \textit{Attention Rollout} \cite{abnar2020quantifying} have been proposed. The objective of this approach is to model the cumulative propagation of information across multiple attention layers. Rather than analyzing individual attention matrices in isolation, this method successively combines attention patterns across layers while incorporating the effect of residual connections, thereby providing a more global approximation of how information flows from input tokens to later representations.
-
-\subsection{Comparison Metrics for Attention Maps}
+\subsection{Comparison Metrics}\label{sec:metrics}
 
 Attention maps can be interpreted as structured representations of token dependencies, where each row describes a probability distribution over the attended context. This makes it possible to compare representations across models using geometric, matrix-based, and probabilistic metrics in order to quantify structural similarities and differences in the learned attention patterns. In this work, we employ complementary measures that capture different properties of attention maps, including global alignment, distributional discrepancies, and spectral complexity.
+
+\subsubsection{\texorpdfstring{Aggregated Attention Representations: $P_{avg}$ and $P_r$}{Aggregated Attention Representations: Pavg and Pr}}
+
+For each attention head and layer, self-attention mechanisms produce row-stochastic matrices that quantify dependency relationships between tokens. In this work, two complementary aggregations of these matrices are used to characterize a model's attention behavior at the layer and global levels. The \textit{average attention map}, denoted $P_{avg}$, is obtained by averaging attention matrices over heads and over dataset examples. \textbf{Attention Rollout} \cite{abnar2020quantifying}, denoted $P_r$, instead models the cumulative propagation of information across layers by successively combining attention matrices while accounting for residual connections, thereby providing a more global approximation of how information flows from input tokens to later representations than any individual attention map or simple average can capture.
 
 \subsubsection{Cosine Similarity}
 
@@ -206,10 +258,10 @@ This metric can be interpreted as a matrix generalization of Euclidean distance 
 Since attention maps are row-stochastic matrices of dimension $n \times n$, the Frobenius distance between two such matrices admits a theoretical upper bound. For each row $i$, the entries $A_{ij}$ and $B_{ij}$ are non-negative and sum to $1$.
 
 \[
-\sum_j (A_{ij} - B_{ij})^2 
-\leq 
-\sum_j A_{ij}^2 + \sum_j B_{ij}^2 
-\leq 
+\sum_j (A_{ij} - B_{ij})^2
+\leq
+\sum_j A_{ij}^2 + \sum_j B_{ij}^2
+\leq
 \sum_j A_{ij} + \sum_j B_{ij} = 2
 \]
 
@@ -294,107 +346,79 @@ PR
 
 This metric estimates how many spectral components contribute significantly to the representation while penalizing distributions that are highly concentrated in a small number of dominant directions. The combined use of both measures enables the analysis of similarities and differences between representations from complementary perspectives on the structural complexity of attention mechanisms.
 
+Beyond the layer-averaged attention maps considered above, the same cosine-similarity, Frobenius-distance, and $JS$-divergence formulas are additionally applied at the level of individual attention heads (Section~\ref{sec:head-heatmaps}), simply by treating each head's attention pattern as its own vector, without requiring any new formal definition.
 
-\section{Methodology}
+\subsubsection{Linear Centered Kernel Alignment (CKA)}\label{sec:cka-def}
 
-The project was developed in \textbf{Python}, due to its widespread adoption within the scientific community and the availability of specialized tools for deep learning and XAI techniques. Model implementation and training were carried out using \textbf{PyTorch}, together with Hugging Face's \textbf{transformers} library for loading and manipulating language models. In addition, \textbf{NumPy} and \textbf{Pandas} were used for data processing and manipulation, \textbf{Matplotlib} for result visualization, and the \textbf{lime} and \textbf{shap} libraries for explanatory analysis of model predictions. Finally, \textbf{scikit-learn} was employed to compute performance metrics and evaluate the models on the \textbf{test} dataset.
-
-The teacher model used in this work was \textbf{TinyLlama-1.1B-Chat-v1.0}. This model is an autoregressive Transformer decoder-only architecture \cite{vaswani2017attention} composed of $22$ Transformer layers. Its design aims to preserve a structure similar to larger models from the LLaMA family while significantly reducing the number of parameters and the computational cost associated with training and inference. The model incorporates modern attention mechanisms, RMSNorm normalization, and rotary positional embeddings, following an architecture representative of contemporary language models \cite{zhang2024tinyllama}.
-
-To maintain comparability between the internal representations of the teacher and student models, the student architecture preserved the same embedding configuration, attention mechanisms, and hidden dimensions, reducing only the depth of the network. Specifically, the number of Transformer blocks was reduced from $22$ to $11$, resulting in a $2:1$ correspondence between teacher and student blocks and facilitating layer-wise comparisons.
-
-\begin{figure}
-\centering
-\includesvg[scale=0.7]{./images/architecture_design.svg}
-\caption{Comparison between the teacher model architecture (left) and the student model architecture (right). The student is initialized entirely with random weights and inherits no parameters from the teacher. Each internal layer of the student has the same size and architecture as the corresponding layers of the teacher.}
-\label{architecture_reduction}
-\end{figure}
-
-When using a generative language model for binary classification, several challenges arise. First, the natural output of the model corresponds to a distribution over the entire vocabulary, which contains $32000$ tokens in the selected teacher model, whereas the task requires only two possible classes. Furthermore, generated tokens do not necessarily coincide with the expected class labels. To address this issue, we verified that the classification labels could be represented by a single token in the model vocabulary (\textit{positive} and \textit{negative}). During training, the loss function was computed over the complete vocabulary distribution, preserving the model's original autoregressive behavior. However, for classification and evaluation purposes, only the logits associated with the target tokens were considered, and the prediction was interpreted as the class with the highest relative probability among them, regardless of whether these tokens were the most probable tokens in the full vocabulary \cite{daillm}.
-
-When working with autoregressive models, the classification problem must be adapted to the generative paradigm used by the model. To achieve this, a base prompt containing a placeholder for the dataset input text was defined, while the expected output consisted of the same prompt concatenated with the target class label. During training, a loss mask was applied so that only the target class token contributed to the loss function. In this way, the model was trained under a generative classification framework restricted to a single target output.
-
-\begin{lstlisting}
-Review: {input}
-Summary:
-\end{lstlisting}
-
-For this study, we used the IMDb sentiment analysis dataset, which consists of $50000$ balanced movie reviews labeled with positive or negative sentiment \cite{lopez2019imdb}. Since the teacher model has a maximum context window of $2048$ tokens, the dataset inputs were filtered to ensure that the prompt concatenated with the target label did not exceed this limit. The filtered dataset ($49987$ valid examples) was then split into \textbf{train}, \textbf{validation}, and \textbf{test} sets, resulting in final sizes of $22492$, $2500$, and $24995$ examples, respectively.
-
-The teacher model corresponds to a language model pretrained for text generation tasks \cite{zhang2024tinyllama}. However, the task considered in this work differs from its original objective. For this reason, a fine-tuning process was performed using a single epoch of the \textbf{train} set, with a \textbf{learning rate} of $2 \times 10^{-5}$, batch size equal to $1$, and the \textbf{AdamW} optimization algorithm. All remaining optimizer parameters were left at their default values. Cross-entropy loss computed over the complete vocabulary was used as the training objective. Fine-tuning was performed over all model parameters.
-
-To avoid overfitting and unnecessary training, \textbf{early stopping} was applied, halting training if model performance failed to improve after $5$ consecutive validation rounds. Validation was performed on random subsets of size $100$ sampled from the \textbf{validation} dataset. During each validation step, training checkpoints were stored to enable recovery from failures, together with the model weights corresponding to the lowest validation loss observed up to that point.
-
-The student model was randomly initialized and trained for $3$ epochs on the \textbf{train} set without applying \textbf{early stopping}. The same batch size and optimization algorithm used for the teacher were retained, while the \textbf{learning rate} was increased to $1 \times 10^{-4}$ because training started from random initialization. The \textbf{validation} set was used solely for checkpointing and for storing the weights corresponding to the best-performing model observed during training.
-
-The loss function combined a supervised cross-entropy term with a distillation term based on the $KL$ divergence between the teacher and student probability distributions, encouraging both task learning and functional similarity to the teacher. The total loss was defined as
+While the metrics above operate on attention maps, hidden-state representations can be compared directly using \textit{Linear Centered Kernel Alignment} (CKA) \cite{kornblith2019similarity}, a similarity measure between two sets of representations that is invariant to orthogonal transformations and isotropic scaling of either representation, making it well suited to comparing hidden states from models of different width or trained under different objectives. Given two matrices of representations $X \in \mathbb{R}^{n \times d_1}$ and $Y \in \mathbb{R}^{n \times d_2}$, obtained from the same $n$ input examples, let $K=XX^\top$ and $L=YY^\top$ denote their Gram matrices. Linear CKA is defined as
 
 \[
-\mathcal{L}
+\mathrm{CKA}(K,L)
 =
-\frac{1}{2}\mathcal{L}_{CE}
-+
-\frac{1}{2}T^2
-D_{KL}(P_P \Vert P_S)
+\frac{\mathrm{HSIC}(K,L)}{\sqrt{\mathrm{HSIC}(K,K)\,\mathrm{HSIC}(L,L)}}
 \]
 
-where $\mathcal{L}_{CE}$ denotes the supervised cross-entropy term, $D_{KL}(P_P \Vert P_S)$ represents the $KL$ divergence between the probability distributions generated by the teacher ($P_P$) and the student ($P_S$), and $T$ is the distillation temperature. Equal weighting was assigned to both terms through coefficients of $1/2$. To enrich the information transferred from the teacher, a distillation temperature of $T=2$ was employed, and the distillation term was additionally scaled by $T^2=4$ to preserve gradient magnitudes, following the original distillation formulation proposed in \cite{hinton2015distilling}.
+where $\mathrm{HSIC}$ denotes the (empirical) Hilbert--Schmidt Independence Criterion, computed on the doubly-centered Gram matrices. $\mathrm{CKA}$ is bounded in $[0,1]$, with $1$ indicating identical representational geometry up to rotation and scale. In this work, $X$ and $Y$ are the last-real-token hidden states extracted at every layer (including the embedding layer) of the teacher and of a given student, respectively, over a fixed sample of prompts; comparing all teacher layers against all student layers, rather than only matched layer pairs, yields a full teacher-layer $\times$ student-layer CKA matrix (Section~\ref{sec:cka-results}).
 
-Both the fine-tuned teacher and the student model were evaluated on the \textbf{test} set before comparisons were conducted. This evaluation was performed to verify the correct operation of the models and their expected behavior on the task. Since the problem corresponds to generative classification with a single output token, the models were evaluated using a single forward pass and analyzing the logits of the target classes. This approach is computationally less expensive than using the full generative decoding loop and also avoids generating tokens outside the expected class set. Consequently, the comparison was restricted to the logits associated with the target classes. The final prediction was obtained by selecting the class corresponding to the highest logit among the target tokens. After classifying all examples, the metrics \textit{accuracy}, \textit{precision}, \textit{recall}, \textit{F1-score}, and the confusion matrix were computed.
+\subsubsection{Explanation Agreement and Faithfulness Metrics}\label{sec:xai-agreement-metrics}
 
-A limitation emerged from the original distillation objective. The $KL$ divergence between teacher and student is a global measure over the entire vocabulary distribution. As a consequence, two models may exhibit similar distributions overall without necessarily preserving the relative probability ordering within a specific subset of tokens. In the context of this work, this implies that the most probable class token may differ between teacher and student even when the global distributions are highly similar.
+To move beyond the qualitative comparison of individual LIME, SHAP, and Integrated Gradients explanations, we additionally compute a set of aggregate metrics over a held-out sample of examples, quantifying the agreement between a given student's word-level attribution scores and the teacher's, as well as the intrinsic quality of each explanation. Let $s_a,s_b$ denote the word-to-score attribution dictionaries produced by the same method for two models on the same input, and let $K$ be the set of words attributed by both (their common support).
 
-To mitigate this issue, a second student model with the same architecture was trained, modifying only the loss function. In addition to the cross-entropy and global distillation terms, an auxiliary $KL$ divergence term was incorporated and computed exclusively over the logits associated with the class tokens. The resulting loss function is given by
+\textit{Top-$k$ Jaccard overlap.} Given $k$ (fixed to $k=10$ throughout), let $T_a,T_b \subset K$ be the top-$k$ words by $|s_a(\cdot)|$ and $|s_b(\cdot)|$, respectively. The overlap is
 
 \[
-\mathcal{L}
-=
-\frac{1}{2}\mathcal{L}_{CE}
-+
-\frac{1}{2}T^2D_{KL}(P_P \Vert P_S)
-+
-\frac{1}{4}T^2D_{KL}(P_P^{(c)} \Vert P_S^{(c)})
+J_k(s_a,s_b) = \frac{|T_a \cap T_b|}{|T_a \cup T_b|}
 \]
 
-where $P_P^{(c)}$ and $P_S^{(c)}$ denote the probability distributions restricted to the \textit{positive} and \textit{negative} tokens. The original weighting between the supervised and global distillation terms was preserved, while the new term was incorporated as an auxiliary signal with lower relative influence during optimization. In particular, it was assigned a smaller weight so as to act as a complementary regularization term, reinforcing the transfer of task-specific knowledge without overriding the distributional information captured by global distillation. Consequently, the new optimization objective seeks not only to approximate the full vocabulary distributions between teacher and student, but also to preserve the relative probability ordering of the classes relevant to the classification task.
+undefined (and excluded from averages) when $|K|<k$.
 
-After verifying the correct operation of the models on the \textbf{test} set, comparisons of outputs and internal representations were performed between the teacher and both student models. Functional evaluation was conducted using classical post-hoc XAI methods, namely \textbf{LIME}, \textbf{SHAP}, and \textbf{Integrated Gradients}, with the objective of identifying which words or tokens exert the greatest influence on classification decisions. The resulting explanations were then used to compare the degree of explanatory consistency between the teacher and student models.
+\textit{Rank and value correlation.} The Spearman rank correlation $\rho$ and Pearson correlation $r$ between $\{s_a(w)\}_{w \in K}$ and $\{s_b(w)\}_{w \in K}$ quantify, respectively, the agreement in the relative ordering and in the linear relationship of the signed attribution scores over the common support.
 
-These methods were applied to two examples from the dataset, one with positive sentiment and one with negative sentiment. For \textbf{LIME}, the \textbf{LimeTextExplainer} was used, generating random perturbations of the input text by removing complete words and observing the resulting variations. For \textbf{SHAP}, text masking was employed, producing a similar procedure based on hiding words from the input text. \textbf{Integrated Gradients} was implemented using the model's \textit{padding token} as the baseline and analyzing how different tokens affected the output. For consistency with the other methods, token-level attribution scores were aggregated after reconstructing complete words.
+\textit{Sign agreement@$k$.} The fraction of $T_a$ (the top-$k$ words by $|s_a(\cdot)|$) for which $\mathrm{sign}(s_a(w)) = \mathrm{sign}(s_b(w))$, measuring whether the two models agree on the polarity (supporting vs.\ contradicting the predicted class) of the most important words, independently of magnitude.
 
-The output probability distributions of the teacher and student models were compared at temperatures $T=1$ and $T=2$, considering only the global vocabulary distributions. These temperatures were selected because $T=1$ corresponds to standard inference and $T=2$ was used during distillation training. The objective of this analysis was to assess the probabilistic similarity of the predictions beyond the final predicted label. In this way, the study evaluates the extent to which both models exhibit similar distributional behavior, even in cases where their point predictions differ.
+\textit{Faithfulness@$k$ (deletion).} For a single model with attribution $s$ on input $x$, let $x_{-k}$ be $x$ with its top-$k$ $|s(\cdot)|$ words masked, and let $p(\cdot\mid x)$ be the model's predicted probability of the true class. Faithfulness is defined as
 
-Comparisons of internal representations focused on similarities and differences in attention mechanisms beyond the importance assigned to individual tokens. Experiments were conducted using two complementary perspectives: a microscopic (granular) analysis and a macroscopic (global) analysis. The granular approach compared teacher attention blocks with potentially corresponding layers in each student model. More specifically, attention map $i$ of each student was compared with either the average attention map or the attention rollout obtained from teacher layers $2i$ and $2i+1$. This comparison is enabled by the $2:1$ architectural relationship between teacher and student models. The global approach focused on comparing the average attention maps and attention rollouts of the complete models. All comparisons were performed on attention maps averaged over the \textbf{test} dataset rather than on individual examples. At the representational level, the goal was to characterize the average behavior of the models regardless of the analysis scale. Additional comparisons between the two student models were also conducted to identify common structural patterns.
+\[
+F_k(s,x) = p(y\mid x) - p(y\mid x_{-k})
+\]
 
-Multiple metrics were employed for attention-block comparisons. First, the matrices were vectorized and cosine similarity was computed to measure the alignment of attention representations within a vector space. Frobenius distances were also computed, providing a notion of proximity in matrix space. For attention maps, the theoretical upper bound of the Frobenius distance serves as a useful reference, although it does not strictly apply to attention rollouts. Since attention maps define a probability distribution on each row by construction, the $JS$ divergence can be naturally used to compare rows between attention blocks. The row-wise $JS$ divergences were averaged, yielding a metric that compares the average token-level probability distributions represented by different attention blocks.
+a large positive value indicating that the words the method deems most important are indeed responsible for a large share of the model's confidence in the correct class \cite{deyoung2020eraser}. Unlike the three metrics above, faithfulness is computed per model (against its own predictions), not between a student and the teacher, and is therefore also reported for the teacher itself as a reference point.
 
-Beyond distance-based comparisons, spectral properties of the attention blocks were also analyzed in order to study geometric similarities between internal attention mechanisms. To this end, singular values were computed for each attention matrix, and the corresponding $ER$ and $PR$ values were evaluated.
-
-The experiments were conducted using an \textbf{NVIDIA GeForce RTX 5070 Ti} GPU with $16$ GB of \textbf{GDDR7} VRAM. The repository containing the source code and experimental results is available at \textbf{https://github.com/PseudoKiwi/ProyectoXAI}.
-
-The writing of this manuscript was partially assisted by generative language models used exclusively for stylistic revision and textual reformulation tasks: Claude Sonnet 4.6 \cite{anthropic2025claude} (Anthropic) and ChatGPT \cite{openai_chatgpt} (OpenAI).
+\textit{Stability.} For a given model and method, explanations are recomputed $M$ times with different random seeds (for LIME, different perturbation samples) on the same subset of examples, and stability is reported as the mean pairwise top-$k$ Jaccard overlap ($J_k$, defined above) across all $\binom{M}{2}$ seed pairs, averaged over examples. Unlike the agreement metrics above, stability characterizes a single model's explanations in isolation, independent of the teacher.
 
 \section{Results}
 
-\subsection{Compression and Training Times}
+\subsection{IMDb: Pilot Study}\label{sec:imdb-results}
 
-The teacher model contains a total of $|P| = 1100048384$ parameters, whereas the student model constructed with half the depth contains $|S| = 615561216$ parameters. This corresponds to a \textit{compression rate}
+This section reports the pilot study conducted on IMDb sentiment classification, covering all five models of Table~\ref{tab:model_family} ($P$, $B$, $S_{bad}$, $S_1$, $S_2$). Given its role as an initial, fast-turnaround study, results are reported compactly, with full per-layer detail retained where it is cheap to do so and cross-model comparisons summarized in prose where a full pairwise table would add little beyond what the teacher-referenced comparisons already show; the main study, conducted on the more complex AG News task, is reported in full depth in Section~\ref{sec:agnews-results}.
+
+\subsubsection{Compression}
+
+The teacher model contains a total of $|P| = 1100048384$ parameters, whereas each student, constructed with half the depth, contains $|S| = 615561216$ parameters. This corresponds to a \textit{compression rate}
 
 \[
 CR = \frac{|P|}{|S|} \approx 1.787
 \]
 
-which is equivalent to an approximate $44\%$ reduction in the number of parameters relative to the teacher model. The parameter reduction is not exactly proportional to the reduction in depth, since components independent of the number of layers, such as the vocabulary embeddings and the output layer (\textit{lm head}), were kept identical between teacher and student in order to preserve representational comparability.
+which is equivalent to an approximate $44\%$ reduction in the number of parameters relative to the teacher model. The parameter reduction is not exactly proportional to the reduction in depth, since components independent of the number of layers, such as the vocabulary embeddings and the output layer (\textit{lm head}), were kept identical between teacher and students in order to preserve representational comparability. This compression rate is identical for all four student variants, since they share the same reduced architecture and differ only in their training loss (Table~\ref{tab:model_family}).
 
-The teacher fine-tuning process required approximately $59$ minutes of training, reaching the \textit{early stopping} criterion before completing the single configured epoch. Evaluation on the \textbf{test} set required approximately $35$ minutes.
+\subsubsection{Evaluation on the \textbf{Test} Set}\label{sec:test-eval}
 
-For the first student model, distillation training lasted approximately $325$ minutes. The best checkpoint was obtained during the final stages of training, indicating that the model continued to improve until the completion of the configured epochs. Evaluation on the \textbf{test} set required approximately $48$ minutes.
+Table~\ref{tab:imdb_perf} reports classification metrics on the \textbf{test} set for all five models. The teacher achieves near-perfect performance, with only $798$ out of $24995$ examples misclassified. $B$, the non-distilled baseline, reaches a moderate $0.8575$ accuracy (confusion matrix $\begin{bsmallmatrix}10405 & 2090\\1473 & 11027\end{bsmallmatrix}$, rows/columns ordered positive/negative), noticeably below the teacher but well above chance. $S_{bad}$, the weakly-distilled variant, performs worse still ($0.8130$ accuracy, confusion matrix $\begin{bsmallmatrix}8647 & 3848\\827 & 11673\end{bsmallmatrix}$), with a bias toward the negative class reminiscent of, though less extreme than, $S_1$'s. $S_1$, trained under a standard global-$KD$ objective, performs worst of all five models ($0.6718$ accuracy), with a strong bias toward the negative class ($7997$ of $12495$ positive examples misclassified as negative; Figure~\ref{student_cm}). $S_2$, which adds the class-restricted $KD$ term, recovers most of this gap and approaches the teacher's performance ($0.9343$ accuracy, $1643$ misclassified), with a mild residual bias toward the positive class (Figure~\ref{student_local_cm}; $\approx69\%$ of its errors are false positives).
 
-The second student model, trained with the additional distillation term restricted to the target classes, required approximately $329$ minutes of training and $54$ minutes for evaluation on the \textbf{test} set.
-
-\subsection{Evaluation on the \textbf{Test} Set}
-
-Evaluation of the teacher model resulted in an almost perfectly diagonal confusion matrix, with only $798$ out of $24995$ examples being misclassified (Figure~\ref{teacher_cm}). The corresponding metrics are reported in Table~\ref{teacher_metrics}. The model demonstrates strong performance on the generative classification task after fine-tuning.
+\begin{table}[h!]
+\centering
+\caption{Performance metrics on the generative classification task, evaluated on the \textbf{test} set, for all five IMDb models.}
+    \begin{tabular}{|l|c|c|c|c|c|}
+        \hline
+        Metric & $P$ & $B$ & $S_{bad}$ & $S_1$ & $S_2$ \\ \hline
+        Accuracy & $0.9681$ & $0.8575$ & $0.8130$ & $0.6718$ & $0.9343$ \\
+        Precision & $0.9681$ & $0.8583$ & $0.8324$ & $0.7810$ & $0.9354$ \\
+        Recall & $0.9681$ & $0.8574$ & $0.8129$ & $0.6718$ & $0.9343$ \\
+        F1 score & $0.9681$ & $0.8574$ & $0.8102$ & $0.6364$ & $0.9342$ \\ \hline
+    \end{tabular}
+    \label{tab:imdb_perf}
+\end{table}
 
 \begin{figure}[b]
 \centering
@@ -403,470 +427,642 @@ Evaluation of the teacher model resulted in an almost perfectly diagonal confusi
 \label{teacher_cm}
 \end{figure}
 
-\begin{table}[h!]
-\centering
-\caption{Performance metrics of the teacher model on the generative classification task after fine-tuning, evaluated on the \textbf{test} dataset.}
-    \begin{tabular}{|c|c|}
-        \hline
-        Metrica & Value \\ \hline
-        Accuracy & $0.9681$ \\
-        Precision & $0.9681$ \\
-        Recall & $0.9681$ \\
-        F1 score & $0.9681$ \\ \hline
-    \end{tabular}
-    \label{teacher_metrics}
-\end{table}
-
-Regarding the first student model, $S_1$, trained under a standard distillation framework, the resulting confusion matrix (Figure~\ref{student_cm}) reveals several issues. First, the total number of misclassified examples is $8203$ out of $24995$. Furthermore, these errors are not uniformly distributed across classes, but instead exhibit a strong bias toward the negative class, with $7997$ out of $12495$ positive examples classified as negative. The corresponding metrics are reported in Table~\ref{student_metrics}. Overall, the performance of $S_1$ is substantially worse than that of the teacher model.
-
-\begin{table}[h!]
-\centering
-\caption{Performance metrics of the student model on the generative classification task after training, evaluated on the \textbf{test} dataset.}
-    \begin{tabular}{|c|c|}
-        \hline
-        Metric & Value \\ \hline
-        Accuracy & $0.6718$ \\
-        Precision & $0.7810$ \\
-        Recall & $0.6718$ \\
-        F1 score & $0.6364$ \\ \hline
-    \end{tabular}
-    \label{student_metrics}
-\end{table}
-
-In contrast to $S_1$, the student model $S_2$ achieves performance close to that of the teacher, resulting in $1643$ misclassified examples out of $24995$. This corresponds to slightly more than twice the number of errors made by the teacher model. The confusion matrix (Figure~\ref{student_local_cm}) reveals a mild bias toward the positive class, as approximately $69\%$ of the misclassified examples were predicted as positive. The corresponding metrics are reported in Table~\ref{student_local_metrics}. Compared with $S_1$, the incorporation of the local $KL$ term is associated with a reduction of approximately $6560$ classification errors and a reversal of the class bias.
-
 \begin{figure}[t]
 \centering
 \includegraphics[scale=0.7]{student_cm.png}
-\caption{Confusion matrix of the student model on the generative classification task after training, evaluated on the \textbf{test} dataset.}
+\caption{Confusion matrix of $S_1$ on the generative classification task, evaluated on the \textbf{test} dataset.}
 \label{student_cm}
 \end{figure}
 
 \begin{figure}[t]
 \centering
 \includegraphics[scale=0.7]{student_local_cm.png}
-\caption{Confusion matrix of the student model with local $KL$ distillation on the generative classification task after training, evaluated on the \textbf{test} dataset.}
+\caption{Confusion matrix of $S_2$ on the generative classification task, evaluated on the \textbf{test} dataset.}
 \label{student_local_cm}
 \end{figure}
 
+Average $KL$ divergence to the teacher was computed for all four student variants at temperatures $T=1$ and $T=2$ over a fixed, balanced held-out subset ($N=3000$); these values supersede the ones reported in earlier iterations of this study, which used an inconsistent reduction across models. Table~\ref{tab:imdb_kl} reports the results. $B$ is, by a wide margin, the least faithful to the teacher's output distribution, while all three distilled variants remain close to the teacher; notably, $S_1$ attains a \emph{lower} $KL$ than $S_2$ at both temperatures, despite $S_2$'s far better classification performance (Table~\ref{tab:imdb_perf}) -- global $KL$ divergence is consequently not a predictive proxy for classification performance on this task, and, as elaborated in Section~\ref{sec:functional-eval}, nor is it a predictive proxy for explanatory alignment. The strong class bias observed in $S_1$'s confusion matrix reflects the fact that global $KL$ divergence, used as its sole distillation objective, does not explicitly preserve the $\argmax$ among the target-class logits; $S_2$'s additional class-restricted term directly targets this failure mode and substantially improves classification performance, at the cost of a higher global $KL$ divergence.
+
 \begin{table}[h!]
 \centering
-\caption{Performance metrics of the student model with local $KL$ distillation on the generative classification task after training, evaluated on the \textbf{test} dataset.}
-    \begin{tabular}{|c|c|}
+\caption{Average $KL$ divergence to the teacher $P$, computed over a fixed balanced subset ($N=3000$) of the \textbf{test} set, at temperatures $T=1$ and $T=2$.}
+    \begin{tabular}{|l|c|c|c|c|}
         \hline
-        Metric & Value \\ \hline
-        Accuracy & $0.9343$ \\
-        Precision & $0.9354$ \\
-        Recall & $0.9343$ \\
-        F1 score & $0.9342$ \\ \hline
+        & $B$ & $S_{bad}$ & $S_1$ & $S_2$ \\ \hline
+        $KL_{T=1}$ & $2.8473$ & $0.1037$ & $0.1042$ & $0.1110$ \\
+        $KL_{T=2}$ & $1.6861$ & $0.1317$ & $0.1274$ & $0.1926$ \\ \hline
     \end{tabular}
-    \label{student_local_metrics}
+    \label{tab:imdb_kl}
 \end{table}
 
-Average $KL$ divergence values were computed over the dataset for temperatures $T=1$ and $T=2$. For $T=2$, the results were $KL(P_P \Vert P_{S_1}) \approx 1.1011$ and $KL(P_P \Vert P_{S_2}) \approx 1.5785$, whereas for $T=1$ the values obtained were $KL(P_P \Vert P_{S_1}) \approx 5.8851$ and $KL(P_P \Vert P_{S_2}) \approx 9.2739$. In both cases, $S_1$ exhibits a probability distribution that is closer to $P_P$ according to the global $KL$ divergence. Despite this, the classification metrics of $S_2$ indicate that it is the better model for the task.
+\subsubsection{Functional Evaluation and Explanation Comparison}\label{sec:functional-eval}
 
-\subsection{Functional Evaluation and Comparison}
+Figure~\ref{fig:imdb_lime_neg} illustrates \textbf{LIME} explanations for one representative negative-sentiment example, across all five models. The teacher assigns negative importance to genuinely negative-sentiment words (e.g.\ \textit{predictable}, \textit{wooden}, \textit{dull}, \textit{uninspiring}) and positive importance to positive-sentiment words, consistent with the ground truth; since $P$ is a general-purpose pretrained model \cite{zhang2024tinyllama}, this is expected, as the tokens most relevant to a sentiment task should be those that genuinely convey sentiment. All four students, in contrast, assign their highest importance to semantically empty function words (\textit{and}, \textit{the}) regardless of their classification performance -- this pattern is visually indistinguishable between $B$, $S_{bad}$, $S_1$, and $S_2$ in this example, and the same qualitative behavior is observed in the corresponding \textbf{SHAP} explanations (not shown). This qualitative impression is confirmed systematically below.
 
-For the negatively classified example, Figure~\ref{teacher_lime_neg} shows that the teacher model assigns negative weights to words with negative sentiment within the context of the dataset. Similarly, it assigns positive weights to words with positive sentiment. Most of the words identified as important for the prediction receive negative weights and are semantically related to a negative review. This behavior is consistent with the ground-truth class of the example.
-
-In contrast, the explanations produced by both student models differ substantially from that of the teacher (Figure~\ref{student_lime_neg} and Figure~\ref{student_local_lime_neg}). Words such as \textit{and} and \textit{the} receive the highest importance scores despite carrying little or no sentiment-related meaning. A similar pattern can be observed across both student models.
-
-For the positively classified example, Figure~\ref{teacher_lime_pos} shows that the teacher model again assigns negative weights to words with negative connotations and positive weights to words with positive connotations. The resulting explanation is consistent with the class label, which in this case corresponds to a positive review.
-
-\begin{figure}[h!]
+\begin{figure*}[t]
 \centering
-\includegraphics[scale=0.52]{teacher_lime_neg.png}
-\caption{\textbf{LIME} explanation generated by the teacher model $P$ for a negative example. The explanation was computed using $5000$ random perturbations of the input text.}
-\label{teacher_lime_neg}
-\end{figure}
+\begin{subfigure}{0.19\linewidth}\includegraphics[width=\linewidth]{teacher_lime_neg.png}\caption{$P$}\end{subfigure}
+\begin{subfigure}{0.19\linewidth}\includegraphics[width=\linewidth]{baseline_lime_neg.png}\caption{$B$}\end{subfigure}
+\begin{subfigure}{0.19\linewidth}\includegraphics[width=\linewidth]{bad_student_lime_neg.png}\caption{$S_{bad}$}\end{subfigure}
+\begin{subfigure}{0.19\linewidth}\includegraphics[width=\linewidth]{student_lime_neg.png}\caption{$S_1$}\end{subfigure}
+\begin{subfigure}{0.19\linewidth}\includegraphics[width=\linewidth]{student_local_lime_neg.png}\caption{$S_2$}\end{subfigure}
+\caption{\textbf{LIME} explanations for a representative negative-sentiment IMDb example, across all five models, computed using $5000$ random word-removal perturbations of the input text.}
+\label{fig:imdb_lime_neg}
+\end{figure*}
 
-\begin{figure}[h!]
-\centering
-\includegraphics[scale=0.52]{student_lime_neg.png}
-\caption{\textbf{LIME} explanation generated by the student model $S_1$ for a negative example. The explanation was computed using $5000$ random perturbations of the input text.}
-\label{student_lime_neg}
-\end{figure}
-
-\begin{figure}[h!]
-\centering
-\includegraphics[scale=0.52]{student_local_lime_neg.png}
-\caption{\textbf{LIME} explanation generated by the student model $S_2$ for a negative example. The explanation was computed using $5000$ random perturbations of the input text.}
-\label{student_local_lime_neg}
-\end{figure}
-
-\begin{figure}[h!]
-\centering
-\includegraphics[scale=0.52]{teacher_lime_pos.png}
-\caption{\textbf{LIME} explanation generated by the teacher model $P$ for a positive example. The explanation was computed using $5000$ random perturbations of the input text.}
-\label{teacher_lime_pos}
-\end{figure}
-
-\begin{figure}[h!]
-\centering
-\includegraphics[scale=0.52]{student_lime_pos.png}
-\caption{\textbf{LIME} explanation generated by the student model $S_1$ for a positive example. The explanation was computed using $5000$ random perturbations of the input text.}
-\label{student_lime_pos}
-\end{figure}
-
-\begin{figure}[h!]
-\centering
-\includegraphics[scale=0.52]{student_local_lime_pos.png}
-\caption{\textbf{LIME} explanation generated by the student model $S_2$ for a positive example. The explanation was computed using $5000$ random perturbations of the input text.}
-\label{student_local_lime_pos}
-\end{figure}
-
-For the student models, the explanations again differ substantially from those of the teacher (Figure~\ref{student_lime_pos} and Figure~\ref{student_local_lime_pos}). The strong attribution assigned to words such as \textit{and} and \textit{the} persists, although the explanations also exhibit notable differences between the two student models.
-
-The results obtained using \textbf{SHAP} and \textbf{Integrated Gradients} are included in Appendix~\ref{anexo:shap} and Appendix~\ref{anexo:ig}, respectively. In the case of \textbf{SHAP}, the teacher model produces attributions that are consistent with the task, whereas the student models predominantly assign importance to words that should not carry such a strong influence given the context. The attributions produced by \textbf{Integrated Gradients} are difficult to interpret for all three models.
-
-The resulting $KL$ divergence values between the students $S_1$, $S_2$, and the teacher $P$ were $KL(P_P \Vert P_{S_1}) \approx 1.1011$ and $KL(P_P \Vert P_{S_2}) \approx 1.5785$ for $T=2$, and $KL(P_P \Vert P_{S_1}) \approx 5.8851$ and $KL(P_P \Vert P_{S_2}) \approx 9.2739$ for $T=1$. In both cases, $S_1$ exhibits a lower $KL$ divergence with respect to the teacher distribution.
-
-\subsection{Representational Comparison}
-
-This section presents the results of the comparisons between the attention maps of the models. We first report layer-wise comparisons and then present the results obtained from global representation comparisons.
-
-\subsubsection{Layer-wise Comparisons}
-
-Tables reporting the results for all the metrics defined to compare attention maps are presented below. We denote by $S_1$ the student trained using standard knowledge distillation, by $S_2$ the student trained with the additional distillation term designed to preserve the argmax among the target-class logits, and by $P$ the teacher model. For each student attention map $i$, comparisons are performed against both the average attention map and the \textit{rollout} obtained from the teacher attention maps $2i$ and $2i+1$.
-
-The cosine similarity between vectorized attention maps is reported in Table~\ref{cosine_similarity}. Overall, comparisons between the students and the teacher exhibit similar trends for both $P_{avg}$ and $P_r$. In the first compared layer ($i=0$), a high similarity is observed between the students and the teacher when using $P_{avg}$, reaching values of $0.9271$ for $S_1$ and $0.9530$ for $S_2$. However, in the second layer ($i=1$), the similarities drop sharply to values close to $0.3$, remaining relatively low throughout intermediate layers and showing only a partial recovery in the deepest layers.
-
-When compared against $P_r$, the overall trends remain similar to those observed with $P_{avg}$, although the first layer exhibits substantially lower values ($\approx 0.28$) than those obtained using the average attention maps. Furthermore, $S_2$ tends to achieve similarities equal to or greater than those of $S_1$ with respect to the teacher in several layers, particularly in the intermediate ones. Finally, the $S_1$--$S_2$ comparison reveals a high degree of similarity between both students across all layers, with values exceeding $0.81$ and, in most cases, approaching $0.9$.
+Beyond this single example, we compute the aggregate agreement and faithfulness metrics of Section~\ref{sec:xai-agreement-metrics} over a held-out sample of $N=100$ test examples, comparing each student's attributions against the teacher's. Tables~\ref{tab:imdb_lime_agg}, \ref{tab:imdb_shap_agg}, and~\ref{tab:imdb_ig_agg} report the results for \textbf{LIME}, \textbf{SHAP}, and \textbf{Integrated Gradients}, respectively (with a zero embedding vector used as the IG baseline, in place of the padding token used in earlier iterations of this study).
 
 \begin{table}[h!]
 \centering
-\caption{Cosine similarities between vectorized attention maps of student $S_1$, student $S_2$, and teacher $P$. $S_1$ was trained by minimizing the $KL$ divergence over the full vocabulary with respect to the teacher, whereas $S_2$ additionally incorporates a $KL$ term restricted to the target tokens in order to preserve the argmax. For each student layer $i$, the teacher representations are obtained as the average attention map $P_{avg}$ and the Attention Rollout $P_r$ computed from layers $2i$ and $2i+1$. Comparisons between $S_1$ and $P$, $S_2$ and $P$, and $S_1$ and $S_2$ are reported.}
-    \begin{tabular}{|c|c|c|c|c|c|}
-        \hline
-        $i$ & $S_1-P_{avg}$ & $S_1-P_{r}$ & $S_2-P_{avg}$ & $S_2-P_{r}$ & $S_1-S_2$ \\
-        \hline
-        0 & $0.9271$ & $0.2752$ & $0.9530$ & $0.2877$ & $0.9713$ \\
-        1 & $0.2688$ & $0.2268$ & $0.3106$ & $0.2588$ & $0.9258$ \\
-        2 & $0.3348$ & $0.3322$ & $0.5676$ & $0.5316$ & $0.8185$ \\
-        3 & $0.1360$ & $0.1484$ & $0.3265$ & $0.3308$ & $0.8940$ \\
-        4 & $0.1623$ & $0.1930$ & $0.2454$ & $0.2537$ & $0.9451$ \\
-        5 & $0.1579$ & $0.1914$ & $0.3558$ & $0.3669$ & $0.9049$ \\
-        6 & $0.1731$ & $0.2138$ & $0.2092$ & $0.2390$ & $0.9586$ \\
-        7 & $0.1687$ & $0.2225$ & $0.1995$ & $0.2619$ & $0.9706$ \\
-        8 & $0.2197$ & $0.2439$ & $0.2492$ & $0.2897$ & $0.9590$ \\
-        9 & $0.2192$ & $0.2334$ & $0.1810$ & $0.2456$ & $0.8860$ \\
-        10 & $0.3066$ & $0.3291$ & $0.2851$ & $0.3415$ & $0.8624$ \\
-        \hline
-    \end{tabular}
-    \label{cosine_similarity}
+\caption{\textbf{LIME} aggregate agreement metrics (vs.\ teacher), $N=100$, $k=10$. $P$'s faithfulness is reported alone, as a self-comparison reference.}
+\footnotesize
+\begin{tabular}{|l|c|c|c|c|c|}
+\hline
+Model & Jaccard@10 & Spearman & Pearson & Sign agr. & Faithf. \\ \hline
+$P$ & -- & -- & -- & -- & $0.172$ \\
+$B$ & $0.183$ & $0.248$ & $0.359$ & $0.775$ & $0.083$ \\
+$S_{bad}$ & $0.170$ & $0.216$ & $0.329$ & $0.770$ & $0.202$ \\
+$S_1$ & $0.136$ & $0.189$ & $0.220$ & $0.731$ & $0.177$ \\
+$S_2$ & $0.212$ & $0.299$ & $0.415$ & $0.796$ & $0.267$ \\ \hline
+\end{tabular}
+\label{tab:imdb_lime_agg}
 \end{table}
 
-The Frobenius distance between attention maps is reported in Table~\ref{frobenius_distance}. Consistent with the cosine similarity results, the closest attention maps correspond to comparisons against the teacher average attention map in the first layer ($i=0$). It is worth noting that the theoretical maximum Frobenius distance between attention maps of dimension $2048 \times 2048$ is $64$. Consequently, the observed distances, particularly those approaching $40$, represent substantial differences between the compared attention distributions.
-
 \begin{table}[h!]
 \centering
-\caption{Layer-wise Frobenius distance between attention maps. $S_1$, $S_2$: students; $P_{avg}$, $P_r$: teacher average attention map and \textit{rollout}. Same notation as in Table~\ref{cosine_similarity}.}
-    \begin{tabular}{|c|c|c|c|c|c|}
-        \hline
-        $i$ & $S_1-P_{avg}$ & $S_1-P_{r}$ & $S_2-P_{avg}$ & $S_2-P_{r}$ & $S_1-S_2$ \\
-        \hline
-        0 & $1.3432$ & $11.3760$ & $1.0846$ & $11.3316$ & $0.8196$ \\
-        1 & $18.9485$ & $21.6454$ & $18.7224$ & $21.4776$ & $1.8418$ \\
-        2 & $35.8680$ & $30.4318$ & $33.7373$ & $28.6160$ & $4.2136$ \\
-        3 & $39.6938$ & $32.8054$ & $38.8643$ & $32.0087$ & $1.9827$ \\
-        4 & $25.9925$ & $25.0566$ & $25.6862$ & $24.8451$ & $1.3581$ \\
-        5 & $22.6046$ & $23.0084$ & $21.5705$ & $22.1283$ & $2.6141$ \\
-        6 & $18.0666$ & $19.9416$ & $17.9186$ & $19.8215$ & $1.4082$ \\
-        7 & $17.6782$ & $19.8836$ & $17.5799$ & $19.6842$ & $1.3172$ \\
-        8 & $19.0674$ & $20.7777$ & $18.9334$ & $20.5559$ & $1.2321$ \\
-        9 & $19.9193$ & $21.3191$ & $20.0786$ & $21.2283$ & $2.0819$ \\
-        10 & $20.4072$ & $21.4697$ & $20.4738$ & $21.3467$ & $2.4813$ \\
-        \hline
-    \end{tabular}
-    \label{frobenius_distance}
+\caption{\textbf{SHAP} aggregate agreement metrics (vs.\ teacher), $N=100$, $k=10$.}
+\footnotesize
+\begin{tabular}{|l|c|c|c|c|c|}
+\hline
+Model & Jaccard@10 & Spearman & Pearson & Sign agr. & Faithf. \\ \hline
+$P$ & -- & -- & -- & -- & $0.118$ \\
+$B$ & $0.117$ & $0.239$ & $0.283$ & $0.788$ & $0.025$ \\
+$S_{bad}$ & $0.123$ & $0.238$ & $0.293$ & $0.761$ & $0.093$ \\
+$S_1$ & $0.096$ & $0.245$ & $0.208$ & $0.723$ & $0.058$ \\
+$S_2$ & $0.176$ & $0.333$ & $0.387$ & $0.800$ & $0.120$ \\ \hline
+\end{tabular}
+\label{tab:imdb_shap_agg}
 \end{table}
 
-
-Moreover, comparisons between $S_1$ and $S_2$ exhibit considerably smaller distances than those observed with respect to the teacher, indicating that both students learn highly similar attention patterns. In general, comparisons against $P_r$ tend to produce larger distances than those against $P_{avg}$ in several layers, particularly in the early ones, although some intermediate-layer comparisons against $P_{avg}$ reach the largest values observed overall.
-
-The row-averaged $JS$ divergence between attention maps is reported in Table~\ref{JS}. Since this metric takes values in the interval $[0,\ln(2)]$, where smaller values indicate more similar distributions, a high degree of agreement between the students and the teacher is observed in the first layer ($i=0$), particularly when compared against $P_{avg}$, yielding values of $0.0122$ for $S_1$ and $0.0086$ for $S_2$.
-
 \begin{table}[h!]
 \centering
-\caption{Row-averaged $JS$ divergence between attention maps. $S_1$, $S_2$: students; $P_{avg}$, $P_r$: teacher average attention map and \textit{rollout}. Same notation as in Table~\ref{cosine_similarity}.}
-    \begin{tabular}{|c|c|c|c|c|c|}
-        \hline
-        $i$ & $S_1-P_{avg}$ & $S_1-P_{r}$ & $S_2-P_{avg}$ & $S_2-P_{r}$ & $S_1-S_2$ \\
-        \hline
-        0 & $0.0122$ & $0.1108$ & $0.0086$ & $0.1042$ & $0.0055$ \\
-        1 & $0.1646$ & $0.2943$ & $0.1597$ & $0.2893$ & $0.0100$ \\
-        2 & $0.3903$ & $0.4644$ & $0.3406$ & $0.4227$ & $0.0327$ \\
-        3 & $0.4936$ & $0.5489$ & $0.4627$ & $0.5173$ & $0.0304$ \\
-        4 & $0.2674$ & $0.3641$ & $0.2544$ & $0.3564$ & $0.0128$ \\
-        5 & $0.2390$ & $0.3247$ & $0.2040$ & $0.2960$ & $0.0225$ \\
-        6 & $0.1921$ & $0.2791$ & $0.1812$ & $0.2689$ & $0.0150$ \\
-        7 & $0.1894$ & $0.2791$ & $0.1827$ & $0.2678$ & $0.0128$ \\
-        8 & $0.2114$ & $0.3001$ & $0.2033$ & $0.2884$ & $0.0126$ \\
-        9 & $0.2218$ & $0.3124$ & $0.2221$ & $0.3035$ & $0.0185$ \\
-        10 & $0.2148$ & $0.3020$ & $0.2092$ & $0.2924$ & $0.0384$ \\
-        \hline
-    \end{tabular}
-    \label{JS}
+\caption{\textbf{Integrated Gradients} (zero baseline) aggregate agreement metrics (vs.\ teacher), $N=100$, $k=10$.}
+\footnotesize
+\begin{tabular}{|l|c|c|c|c|c|}
+\hline
+Model & Jaccard@10 & Spearman & Pearson & Sign agr. & Faithf. \\ \hline
+$P$ & -- & -- & -- & -- & $0.010$ \\
+$B$ & $0.793$ & $-0.005$ & $0.086$ & $0.526$ & $0.010$ \\
+$S_{bad}$ & $0.778$ & $0.028$ & $0.120$ & $0.538$ & $0.085$ \\
+$S_1$ & $0.814$ & $0.010$ & $-0.021$ & $0.513$ & $0.025$ \\
+$S_2$ & $0.787$ & $0.039$ & $0.077$ & $0.503$ & $0.019$ \\ \hline
+\end{tabular}
+\label{tab:imdb_ig_agg}
 \end{table}
 
-In subsequent layers, the divergences increase substantially, reaching their maximum values in intermediate layers ($i=2$ and $i=3$), particularly in comparisons against $P_r$, where values close to $0.55$ are obtained. Thereafter, the divergences decrease and stabilize in deeper layers, although they remain considerably larger than those observed in the first layer.
+For both \textbf{LIME} and \textbf{SHAP}, $S_2$ is the best-aligned student with the teacher on every agreement metric and the most faithful of the four students, followed by $S_{bad}$, then $B$ and $S_1$ (which alternate depending on the metric); none of the four students, however, reaches faithfulness values remotely close to being semantically satisfactory, consistent with the qualitative impression from Figure~\ref{fig:imdb_lime_neg}. \textbf{Integrated Gradients} tells a qualitatively different story: all models, including the teacher, exhibit low faithfulness, and while top-$k$ overlap is high ($\approx0.78$--$0.81$) across all four students, rank and value correlations are close to zero (occasionally negative), and sign agreement hovers near chance ($\approx0.50$--$0.54$). This combination -- high token-identity overlap but near-zero rank agreement -- indicates that IG tends to select a similar \emph{set} of tokens across models without agreeing on their relative importance or polarity, a pattern we revisit in Section~\ref{sec:limitations}.
 
-Furthermore, comparisons between $S_1$ and $S_2$ consistently yield the lowest divergence values across all layers, ranging from $0.0055$ to $0.0384$, indicating a high degree of similarity between the two students. Overall, $S_2$ tends to exhibit divergences equal to or lower than those of $S_1$ with respect to the teacher, particularly in intermediate layers, suggesting a better alignment of its attention patterns.
-
-The $PR$ values computed for each attention map are reported in Table~\ref{participation_ratio}. In general, the maps associated with $P_{avg}$ exhibit values close to $1$ across nearly all layers, suggesting highly concentrated distributions. In contrast, $P_r$ displays markedly different behavior, particularly in the first layer ($i=0$), where it reaches a value of $365.1039$, indicating a substantially more diffuse attention distribution.
+Table~\ref{tab:imdb_stability} reports \textbf{LIME} stability (mean pairwise Jaccard@10 across $5$ re-runs, $N=20$). The teacher's explanations are less stable than $S_2$'s, and more stable than $B$'s, $S_{bad}$'s, and $S_1$'s -- stability alone is therefore not a proxy for explanation quality, since the teacher's substantially more meaningful explanations (Figure~\ref{fig:imdb_lime_neg}) are not the most reproducible ones.
 
 \begin{table}[h!]
 \centering
-\caption{$PR$ computed for each attention map. $S_1$, $S_2$: students; $P_{avg}$, $P_r$: teacher average attention map and \textit{rollout}.}
+\caption{\textbf{LIME} stability (mean pairwise Jaccard@10 across $5$ seeds, $N=20$).}
+\begin{tabular}{|l|c|c|c|c|c|}
+\hline
+Model & $P$ & $B$ & $S_{bad}$ & $S_1$ & $S_2$ \\ \hline
+Stability & $0.548$ & $0.587$ & $0.684$ & $0.611$ & $0.710$ \\ \hline
+\end{tabular}
+\label{tab:imdb_stability}
+\end{table}
+
+Taken together, these results reinforce the point raised in Section~\ref{sec:test-eval}: performance, distributional similarity, and explanatory alignment are distinct axes that need not covary. $S_2$ is simultaneously the best-performing student (Table~\ref{tab:imdb_perf}) and the best-aligned with the teacher on \textbf{LIME}/\textbf{SHAP} agreement and faithfulness, yet it has a \emph{higher} global $KL$ divergence than $S_1$ (Table~\ref{tab:imdb_kl}) -- the student closest to the teacher in raw output distribution is neither the most accurate nor the most explanatorily faithful.
+
+\subsubsection{Representational Comparison}\label{sec:imdb-repr}
+
+This section presents the results of the comparisons between the attention maps and hidden states of the models. We denote by $B$ the non-distilled baseline, $S_{bad}$ the weakly-distilled student, $S_1$ the student trained using standard global $KD$, $S_2$ the student trained with the additional class-restricted $KD$ term, and $P$ the teacher model, as in Table~\ref{tab:model_family}. \emph{These numbers, recomputed as part of the corrections underlying this revision, supersede the layer-wise values reported in earlier iterations of this study.} Cross-model comparisons other than each student against the teacher (e.g.\ $B$ vs.\ $S_1$) are summarized in prose rather than tabulated in full, following the same rationale as for the $KL$ comparisons above.
+
+\paragraph{Layer-wise Comparisons}
+
+For each student attention map $i$, comparisons are performed against the average attention map obtained from teacher layers $2i$ and $2i+1$ ($P_{avg}$); the corresponding rollout-referenced comparisons follow very similar trends and are omitted from the compact tables below for brevity. Figure~\ref{fig:imdb_layer_div} summarizes the resulting layer-wise trends for all four students at a glance.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{imdb_layer_divergence_profiles.png}
+\caption{Layer-wise cosine similarity, Frobenius distance, and $JS$ divergence between each student's attention map $i$ and the teacher's $P_{avg}$ (layers $2i,2i+1$), for all four IMDb students.}
+\label{fig:imdb_layer_div}
+\end{figure}
+
+Table~\ref{tab:imdb_cosine} reports the cosine similarity between each student's attention map and $P_{avg}$. All four models show a similarly high first-layer similarity ($\ge0.92$), which then drops sharply from layer $1$ onward. Notably, $B$ -- which receives no supervision from the teacher whatsoever -- is consistently the \emph{least} similar to the teacher of the four models in the majority of layers (e.g.\ $0.15$--$0.29$ in layers $1$--$10$, versus $0.19$--$0.69$ for the distilled variants), suggesting that on this dataset, distillation does confer some attention-level alignment beyond what depth reduction alone would produce -- in contrast with the pattern observed on AG News (Section~\ref{sec:agnews-repr}).
+
+\begin{table}[h!]
+\centering
+\caption{Cosine similarity between each student's attention map $i$ and the teacher's $P_{avg}$ (layers $2i,2i+1$).}
     \begin{tabular}{|c|c|c|c|c|}
         \hline
-        $i$ & $S_1$ & $S_2$ & $P_{avg}$ & $P_{r}$ \\
+        $i$ & $B$ & $S_{bad}$ & $S_1$ & $S_2$ \\
         \hline
-        0 & $2.4352$ & $2.5027$ & $2.9765$ & $365.1039$ \\
-        1 & $2.0897$ & $1.7893$ & $1.009$ & $1.8481$ \\
-        2 & $1.8754$ & $1.2828$ & $1.0003$ & $1.3134$ \\
-        3 & $2.0921$ & $2.1538$ & $1.0005$ & $1.2851$ \\
-        4 & $4.1263$ & $3.2787$ & $1.0031$ & $1.5620$ \\
-        5 & $8.5767$ & $4.7921$ & $1.0040$ & $1.7202$ \\
-        6 & $9.7336$ & $12.6110$ & $1.0109$ & $2.1388$ \\
-        7 & $10.1048$ & $15.8588$ & $1.0123$ & $2.1546$ \\
-        8 & $4.9535$ & $7.0641$ & $1.0085$ & $1.9760$ \\
-        9 & $3.4228$ & $8.6932$ & $1.0055$ & $1.9005$ \\
-        10 & $3.2704$ & $8.6830$ & $1.0128$ & $1.8739$ \\
+        0 & $0.9330$ & $0.9230$ & $0.9367$ & $0.9233$ \\
+        1 & $0.1735$ & $0.4703$ & $0.6479$ & $0.3579$ \\
+        2 & $0.2869$ & $0.4170$ & $0.4552$ & $0.6293$ \\
+        3 & $0.2283$ & $0.4325$ & $0.5018$ & $0.6865$ \\
+        4 & $0.1538$ & $0.3698$ & $0.4191$ & $0.6536$ \\
+        5 & $0.1816$ & $0.1938$ & $0.3938$ & $0.3026$ \\
+        6 & $0.1659$ & $0.2751$ & $0.2971$ & $0.3121$ \\
+        7 & $0.1328$ & $0.2604$ & $0.4788$ & $0.3814$ \\
+        8 & $0.1421$ & $0.1849$ & $0.3150$ & $0.1948$ \\
+        9 & $0.1561$ & $0.1498$ & $0.1995$ & $0.2338$ \\
+        10 & $0.1350$ & $0.2709$ & $0.2340$ & $0.1641$ \\
         \hline
     \end{tabular}
-    \label{participation_ratio}
+    \label{tab:imdb_cosine}
 \end{table}
 
-In contrast, the student models exhibit values consistently higher than those of $P_{avg}$ and lower than those of $P_r$, with an increasing trend toward intermediate and deeper layers. In particular, $S_1$ and $S_2$ reach their highest values between layers $i=5$ and $i=7$, suggesting an increase in attention dispersion within these representations. Furthermore, differences between the two students emerge in certain layers, especially from $i=6$ onward, where $S_2$ exhibits higher values.
-
-The $ER$ values are reported in Table~\ref{entropy_based}. Unlike $PR$, this metric reveals much more pronounced scale differences between the teacher average attention maps and the teacher \textit{rollout}. While $P_{avg}$ maintains relatively low effective ranks, particularly in early and intermediate layers, $P_r$ consistently exhibits high values, close to $1800$ across all layers, indicating substantially more distributed representations.
+Table~\ref{tab:imdb_frobenius} reports the corresponding Frobenius distances. Unlike cosine similarity, the four models are nearly indistinguishable from each other on this metric, all following essentially the same profile: near-perfect alignment at $i=0$ (distances $\approx1.2$--$1.4$, i.e.\ below $2\%$ of the theoretical maximum of $64$), rising sharply to a peak around $i=2$--$3$ ($\approx34$--$39$, $\approx55$--$62\%$ of the bound), then decreasing and stabilizing around $17$--$21$ in later layers. Row-averaged $JS$ divergence (not tabulated) mirrors this same profile for all four models, from $\approx0.01$--$0.02$ at $i=0$ up to $\approx0.35$--$0.49$ at the peak.
 
 \begin{table}[h!]
 \centering
-\caption{$ER$ computed for each attention map. $S_1$, $S_2$: students; $P_{avg}$, $P_r$: teacher average attention map and \textit{rollout}.}
+\caption{Frobenius distance between each student's attention map $i$ and the teacher's $P_{avg}$ (layers $2i,2i+1$).}
     \begin{tabular}{|c|c|c|c|c|}
         \hline
-        $i$ & $S_1$ & $S_2$ & $P_{avg}$ & $P_{r}$ \\
+        $i$ & $B$ & $S_{bad}$ & $S_1$ & $S_2$ \\
         \hline
-        0 & $77.7460$ & $93.2713$ & $257.7619$ & $2026.0115$ \\
-        1 & $75.5660$ & $56.2762$ & $32.7049$ & $1817.4816$ \\
-        2 & $137.7758$ & $17.5452$ & $4.4293$ & $1666.9999$ \\
-        3 & $159.8630$ & $207.4611$ & $5.7635$ & $1648.0753$ \\
-        4 & $354.9870$ & $259.7679$ & $15.9719$ & $1764.5404$ \\
-        5 & $534.8630$ & $396.5259$ & $20.1245$ & $1798.4602$ \\
-        6 & $400.9078$ & $495.8846$ & $50.6510$ & $1849.4958$ \\
-        7 & $419.5436$ & $457.3091$ & $64.9083$ & $1850.6656$ \\
-        8 & $348.2325$ & $414.0989$ & $49.0093$ & $1833.6090$ \\
-        9 & $298.1621$ & $428.9598$ & $34.7594$ & $1825.2311$ \\
-        10 & $382.6713$ & $466.4542$ & $100.7165$ & $1819.1229$ \\
+        0 & $1.2648$ & $1.3557$ & $1.2356$ & $1.3529$ \\
+        1 & $19.1492$ & $17.8870$ & $16.7155$ & $18.3989$ \\
+        2 & $36.2836$ & $35.6589$ & $35.4357$ & $33.9489$ \\
+        3 & $39.1174$ & $38.2045$ & $37.8417$ & $36.4605$ \\
+        4 & $26.4354$ & $25.4998$ & $25.0765$ & $22.9474$ \\
+        5 & $22.5318$ & $22.4848$ & $21.5096$ & $21.9667$ \\
+        6 & $18.1655$ & $17.6709$ & $17.5652$ & $17.4682$ \\
+        7 & $18.0399$ & $17.3913$ & $16.0823$ & $16.8076$ \\
+        8 & $19.6057$ & $19.4096$ & $18.8159$ & $19.3582$ \\
+        9 & $20.3702$ & $20.4235$ & $20.1939$ & $20.0093$ \\
+        10 & $21.3099$ & $20.6607$ & $20.8501$ & $21.1837$ \\
         \hline
     \end{tabular}
-    \label{entropy_based}
+    \label{tab:imdb_frobenius}
 \end{table}
 
-The student models exhibit an intermediate behavior with respect to the two teacher references, with effective ranks substantially larger than those of $P_{avg}$ but considerably smaller than those of $P_r$. Overall, an increase in effective rank can be observed in deeper layers, particularly from $i=4$ onward. Furthermore, although $S_1$ and $S_2$ follow similar trends, notable discrepancies appear in some layers, such as $i=2$, where $S_2$ exhibits a substantially lower value than $S_1$, and in the final layers, where $S_2$ tends to achieve higher effective ranks.
-
-\subsubsection{Global Comparisons}
-
-The comparison of aggregated global representations is presented in Table~\ref{tab:global_comparison}. Overall, the students' \textit{mean} representations exhibit moderate similarity with respect to the teacher's global average attention representation ($P_{avg}$), achieving cosine similarities of $0.2492$ for $S_1$ and $0.3478$ for $S_2$. Likewise, the $JS$ divergences remain relatively low ($<0.2$), while the Frobenius distances are approximately $21$, indicating partial similarity between the aggregated attention structures.
+Table~\ref{tab:imdb_pr} and Table~\ref{tab:imdb_er} report the spectral effective-rank measures. $P_{avg}$ remains close to rank-one throughout ($PR\approx1$ beyond $i=0$), while $P_r$ is highly dispersed ($ER\approx1650$--$2027$). All four students occupy an intermediate position, with effective ranks generally increasing toward deeper layers, and no consistent ordering among $B$, $S_{bad}$, $S_1$, and $S_2$ -- e.g.\ $B$ has the lowest $ER$ at $i=0$ ($60.2$) but is squarely in the middle of the pack from $i=4$ onward.
 
 \begin{table}[h!]
 \centering
-\caption{Comparison of aggregated global representations using cosine similarity, Frobenius distance, and row-averaged $JS$ divergence. $S_1$ and $S_2$ denote the average attention maps and Attention Rollout computed over all layers of each student. $P$ denotes the teacher average attention maps and Attention Rollout.}
-    \begin{tabular}{|l|l|c|c|c|}
+\caption{Participation Ratio ($PR$) for each attention map.}
+\small
+    \begin{tabular}{|c|c|c|c|c|c|c|}
         \hline
-        Representation A & Representation B & Cosine & Frobenius & JS \\
+        $i$ & $B$ & $S_{bad}$ & $S_1$ & $S_2$ & $P_{avg}$ & $P_r$ \\
         \hline
-        $S_{1_{avg}}$ & $P_{avg}$ & $0.2492$ & $21.4037$ & $0.1946$ \\
-        $S_{1_{avg}}$ & $P_r$ & $0.1731$ & $44.7235$ & $0.6554$ \\
-        $S_{2_{avg}}$ & $P_{avg}$ & $0.3478$ & $20.9771$ & $0.1815$ \\
-        $S_{2_{avg}}$ & $P_r$ & $0.2693$ & $44.3146$ & $0.6374$ \\
-        $S_{1_r}$ & $P_{avg}$ & $0.9534$ & $6.8544$ & $0.1787$ \\
-        $S_{1_r}$ & $P_r$ & $0.9434$ & $27.6911$ & $0.2719$ \\
-        $S_{2_r}$ & $P_{avg}$ & $0.9773$ & $4.7195$ & $0.1568$ \\
-        $S_{2_r}$ & $P_r$ & $0.9699$ & $24.4101$ & $0.2306$ \\
-        $S_{1_{avg}}$ & $S_{2_{avg}}$ & $0.9865$ & $0.6835$ & $0.0024$ \\
-        $S_{1_{avg}}$ & $S_{2_r}$ & $0.2977$ & $21.2566$ & $0.3120$ \\
-        $S_{1_r}$ & $S_{2_{avg}}$ & $0.4221$ & $18.0665$ & $0.2879$ \\
-        $S_{1_r}$ & $S_{2_r}$ & $0.9953$ & $3.3768$ & $0.0030$ \\
+        0 & $2.55$ & $2.62$ & $2.45$ & $2.73$ & $3.26$ & $399.64$ \\
+        1 & $5.08$ & $2.12$ & $1.70$ & $5.04$ & $1.01$ & $1.86$ \\
+        2 & $3.37$ & $2.98$ & $2.45$ & $1.65$ & $1.00$ & $1.31$ \\
+        3 & $2.94$ & $3.34$ & $2.48$ & $2.00$ & $1.00$ & $1.29$ \\
+        4 & $4.96$ & $4.39$ & $4.27$ & $2.39$ & $1.00$ & $1.55$ \\
+        5 & $5.57$ & $17.15$ & $5.90$ & $7.65$ & $1.01$ & $1.72$ \\
+        6 & $7.32$ & $11.45$ & $10.63$ & $13.57$ & $1.01$ & $2.14$ \\
+        7 & $13.72$ & $13.40$ & $7.50$ & $7.13$ & $1.02$ & $2.16$ \\
+        8 & $11.50$ & $15.95$ & $5.49$ & $14.88$ & $1.01$ & $1.97$ \\
+        9 & $8.93$ & $11.65$ & $15.77$ & $11.40$ & $1.01$ & $1.90$ \\
+        10 & $9.68$ & $8.61$ & $17.02$ & $12.54$ & $1.02$ & $1.88$ \\
         \hline
     \end{tabular}
-    \label{tab:global_comparison}
+    \label{tab:imdb_pr}
 \end{table}
-
-On the other hand, the students' \textit{rollout} representations exhibit high similarity with respect to the teacher's global average attention representation, reaching cosine similarities in the range of $0.95$--$0.97$ and considerably smaller Frobenius distances ($4.7195$ and $6.8544$). When compared against the teacher's global \textit{rollout}, cosine similarities remain high ($>0.94$), although the Frobenius distances increase to values close to $24$ and $28$, suggesting that the representations preserve similar global patterns while differing in magnitude or scale.
-
-The comparison between students reveals a high degree of similarity between representations of the same type. In particular, $S_{1_{avg}}$ and $S_{2_{avg}}$ achieve a cosine similarity of $0.9865$, a Frobenius distance of $0.6835$, and a $JS$ divergence of $0.0024$. Similarly, the \textit{rollout} representations of both students reach a cosine similarity of $0.9953$, indicating an almost identical alignment between the learned aggregated attention patterns.
-
-The spectral analysis of the global representations is presented in Table~\ref{tab:spectral_global}. The students' \textit{mean} representations exhibit larger values of both $PR$ and $ER$ than those of the teacher, suggesting a greater dispersion of spectral mass and a broader utilization of effective components. In contrast, the teacher's global representations exhibit $PR$ values close to $1$, indicating a highly concentrated structure.
 
 \begin{table}[h!]
 \centering
-\caption{Spectral analysis of aggregated global representations. $PR$ and $ER$ are reported for each representation.}
+\caption{Entropy-based effective rank ($ER$) for each attention map.}
+\small
+    \begin{tabular}{|c|c|c|c|c|c|c|}
+        \hline
+        $i$ & $B$ & $S_{bad}$ & $S_1$ & $S_2$ & $P_{avg}$ & $P_r$ \\
+        \hline
+        0 & $60.2$ & $116.9$ & $95.6$ & $107.3$ & $309.3$ & $2026.6$ \\
+        1 & $329.4$ & $113.1$ & $101.8$ & $399.1$ & $42.2$ & $1819.4$ \\
+        2 & $277.5$ & $298.3$ & $229.6$ & $179.8$ & $5.2$ & $1667.7$ \\
+        3 & $327.7$ & $398.4$ & $303.6$ & $360.5$ & $7.0$ & $1650.1$ \\
+        4 & $314.5$ & $437.1$ & $516.8$ & $484.6$ & $20.4$ & $1761.2$ \\
+        5 & $355.8$ & $507.5$ & $469.8$ & $489.5$ & $26.3$ & $1797.7$ \\
+        6 & $402.0$ & $497.1$ & $486.0$ & $514.5$ & $66.3$ & $1849.2$ \\
+        7 & $505.1$ & $554.9$ & $505.2$ & $488.0$ & $84.2$ & $1850.0$ \\
+        8 & $506.8$ & $521.7$ & $431.3$ & $501.2$ & $64.1$ & $1832.5$ \\
+        9 & $460.2$ & $514.3$ & $549.1$ & $551.3$ & $45.5$ & $1823.9$ \\
+        10 & $491.4$ & $508.5$ & $550.6$ & $528.0$ & $129.1$ & $1819.1$ \\
+        \hline
+    \end{tabular}
+    \label{tab:imdb_er}
+\end{table}
+
+Across all four models, $S_1$ and $S_2$ remain highly similar to each other in every layer (cosine similarity $>0.81$ throughout, not tabulated), consistent with earlier iterations of this study; the same holds for $B$ and $S_{bad}$ against the distilled students, indicating that at the layer-wise level, differences between the loss variants of Table~\ref{tab:model_family} are second-order compared to the shared effect of the reduced architecture and task.
+
+\paragraph{Global Comparisons}
+
+Table~\ref{tab:imdb_global} reports comparisons between whole-model aggregated representations. As in earlier iterations of this study, the students' \textit{rollout} representations align strongly with the teacher's global average map ($\cos\ge0.91$, $d_F\le10.6$), markedly higher than between the students' own average maps and $P_{avg}$ ($\cos\approx0.21$--$0.44$, $d_F\approx20$--$22$); this should still be interpreted cautiously, as both aggregation schemes converge toward more uniform distributions through different mechanisms (Section~\ref{sec:metrics}). All four students, including the non-distilled $B$, participate in this pattern to a similar degree, so it cannot be attributed specifically to distillation. $S_1$ and $S_2$ remain close to each other in both aggregations ($\cos=0.988$ for average maps, $\cos=0.998$ for rollouts), and $B$ and $S_{bad}$ are likewise close to the distilled students (e.g.\ $B_{avg}$--$S_{1,avg}$: $\cos=0.714$; $S_{bad,avg}$--$S_{1,avg}$: $\cos=0.988$).
+
+\begin{table}[h!]
+\centering
+\caption{Global attention comparisons (whole-model average and rollout maps) against the teacher's global average ($P_{avg}$) and rollout ($P_r$). The cosine similarity for $S_{1,avg}$--$P_{avg}$ could not be recovered due to a logging error in the source notebook (the corresponding Frobenius distance was logged twice instead); this cell is intentionally left blank rather than estimated.}
+\small
 \begin{tabular}{|l|c|c|}
         \hline
-        Representation & PR & ER \\
+        Comparison & Cosine & $d_F$ \\
         \hline
-        $P_{avg}$ & $1.0052$ & $31.1072$ \\
-        $P_r$ & $1.0000$ & $1.0003$ \\
-        $S_{1_{avg}}$ & $3.2826$ & $336.6037$ \\
-        $S_{1_r}$ & $1.0055$ & $2.4227$ \\
-        $S_{2_{avg}}$ & $3.2873$ & $362.2327$ \\
-        $S_{2_r}$ & $1.0022$ & $2.1826$ \\
+        $B_{avg}$--$P_{avg}$ & $0.2087$ & $21.64$ \\
+        $B_{avg}$--$P_r$ & $0.1405$ & $44.88$ \\
+        $B_{r}$--$P_{avg}$ & $0.9750$ & $5.09$ \\
+        $B_{r}$--$P_r$ & $0.9694$ & $23.78$ \\
+        $S_{bad,avg}$--$P_{avg}$ & $0.3168$ & $21.16$ \\
+        $S_{bad,avg}$--$P_r$ & $0.2455$ & $44.40$ \\
+        $S_{bad,r}$--$P_{avg}$ & $0.9058$ & $10.63$ \\
+        $S_{bad,r}$--$P_r$ & $0.8909$ & $32.59$ \\
+        $S_{1,avg}$--$P_{avg}$ & -- & $20.69$ \\
+        $S_{1,avg}$--$P_r$ & $0.3504$ & $43.92$ \\
+        $S_{1,r}$--$P_{avg}$ & $0.9069$ & $9.99$ \\
+        $S_{1,r}$--$P_r$ & $0.8956$ & $31.37$ \\
+        $S_{2,avg}$--$P_{avg}$ & $0.4440$ & $20.54$ \\
+        $S_{2,avg}$--$P_r$ & $0.3797$ & $43.77$ \\
+        $S_{2,r}$--$P_{avg}$ & $0.9251$ & $9.59$ \\
+        $S_{2,r}$--$P_r$ & $0.9133$ & $31.46$ \\
         \hline
     \end{tabular}
-    \label{tab:spectral_global}
+\label{tab:imdb_global}
 \end{table}
 
-In particular, the teacher's global \textit{rollout} exhibits both $PR$ and $ER$ values close to $1$, suggesting a representation dominated by very few effective components. The students' \textit{rollout} representations display similar behavior, although with slightly larger values, indicating that aggregation through \textit{rollout} induces substantially more concentrated global representations than those obtained through simple averaging.
+Table~\ref{tab:imdb_global_spectral} reports the global spectral analysis. As at the layer-wise level, the teacher's global rollout is close to rank-one ($PR\approx ER\approx1$), while every student's average map is markedly more dispersed ($ER\approx284$--$464$); again, $B$'s dispersion ($ER=284.3$) is comparable to, rather than clearly lower than, the distilled students' ($ER=446$--$458$), so this global spectral signature is not obviously a distillation-specific effect either.
 
-\section{Discussion}
+\begin{table}[h!]
+\centering
+\caption{Global spectral analysis (Participation Ratio and entropy-based effective rank).}
+\begin{tabular}{|l|c|c|}
+        \hline
+        Representation & $PR$ & $ER$ \\
+        \hline
+        $P_{avg}$ & $1.0063$ & $40.47$ \\
+        $P_r$ & $1.0000$ & $1.00$ \\
+        $B_{avg}$ & $3.4352$ & $284.34$ \\
+        $B_r$ & $1.0022$ & $1.98$ \\
+        $S_{bad,avg}$ & $5.8041$ & $457.74$ \\
+        $S_{bad,r}$ & $1.0104$ & $3.38$ \\
+        $S_{1,avg}$ & $4.3530$ & $446.50$ \\
+        $S_{1,r}$ & $1.0057$ & $3.03$ \\
+        $S_{2,avg}$ & $4.7671$ & $463.61$ \\
+        $S_{2,r}$ & $1.0052$ & $3.23$ \\
+        \hline
+    \end{tabular}
+    \label{tab:imdb_global_spectral}
+\end{table}
 
-\subsection{Evaluation on the \textbf{test} Set}
+\subsubsection{Per-Head Attention Similarity}\label{sec:head-heatmaps}
 
-The strong performance of the teacher model is not surprising. As a general-purpose pretrained model, it is expected to have acquired a basic understanding of language beyond the specific task under consideration. Combined with the fine-tuning process performed to specifically use the class tokens, the obtained results are consistent with expectations. Furthermore, since the positive and negative classes already corresponded to existing tokens in the model's vocabulary, the model was already familiar with their semantic meaning, making them more natural outputs than arbitrary tokens. This may have potentially biased the model toward correct behavior, further reinforced by the fine-tuning process.
+Beyond layer-averaged attention, Figure~\ref{fig:imdb_head_heatmap} compares individual attention heads directly: for each student, a $32\times32$ cosine-similarity matrix between the teacher's heads and the student's heads, averaged over the $11$ matched layer pairs and over $N=50$ prompts (Section~\ref{sec:setup}). All four students show a qualitatively similar, diffuse pattern: similarities are uniformly modest (mostly in the $0.2$--$0.5$ range, with no head pair exceeding $\approx0.6$) and organized into vertical bands, indicating that a subset of student heads is moderately similar to \emph{most} teacher heads rather than any single teacher head being distinctively reproduced by a matching student head. $B$'s heatmap is visibly weaker overall (paler) than the three distilled variants', suggesting a modest distillation effect at the level of individual heads for this dataset, consistent with the layer-wise cosine-similarity finding above -- though the effect is far less pronounced than at the level of full attention maps.
 
-In contrast, the student models exhibited substantially different results. In the case of $S_1$, only one of the classes was classified correctly due to a clear bias in its predictions. The poor performance of the model can be attributed to the fact that the $KL$ divergence, when used as a loss function, seeks to produce similar probability distributions but does not preserve the $\argmax$. For the temperature $T=2$ used during training, the average divergence over the dataset was $KL(P_P||P_{S_1}) \approx 1.1011$, indicating that $S_1$ learned the softened distribution produced by $P$ over the entire vocabulary reasonably well.
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{imdb_head_similarity_heatmap.png}
+\caption{Per-head cosine similarity between teacher and student attention heads, averaged over $11$ matched layer pairs and $N=50$ prompts, for all four IMDb students.}
+\label{fig:imdb_head_heatmap}
+\end{figure}
 
-Nevertheless, for $T=1$, the divergence increases to $KL(P_P||P_{S_1}) \approx 5.8851$, a considerably larger value, reflecting substantial differences in the actual distributions used to select the next token. However, $KL$ divergence does not appear to be a predictive metric of classification performance. Model $S_2$ exhibits $KL(P_P||P_{S_2}) \approx 9.2739$ at $T=1$, corresponding to an even larger divergence, yet its classification results are substantially closer to those of $P$. Even at $T=2$, $S_2$ presents $KL(P_P||P_{S_2}) \approx 1.5785 > KL(P_P||P_{S_1})$, indicating that in neither case does the $KL$ divergence accurately reflect task performance.
+\subsubsection{Hidden-State Comparison (Linear CKA)}\label{sec:cka-results}
 
-Since $S_2$ was trained with an additional term designed to preserve the $\argmax$ of the logits corresponding to the target classes, its classification performance shows a substantial improvement. Nevertheless, it still exhibits a bias in the confusion matrix, with more errors occurring in the classification of negative examples than positive ones. Given that the teacher model does not display this behavior, such bias may be explained by insufficient training, limited data availability, or by the distillation process itself, which, by optimizing over the entire vocabulary, may introduce biases affecting the classification tokens.
+Figure~\ref{fig:imdb_cka} reports the full teacher-layer $\times$ student-layer linear CKA matrix (Section~\ref{sec:cka-def}) for each student, computed on last-token hidden states over $N=100$ prompts. All three distilled students exhibit the same qualitative pattern: near-zero CKA with the embedding layer and the first one or two teacher layers, rising sharply and saturating close to $1$ from roughly the middle of the teacher's depth onward, essentially independent of which student layer is being compared -- i.e.\ once the teacher's representations become sufficiently deep, they become globally similar (in the CKA sense) to \emph{every} student layer, not only to the nominally corresponding one. Strikingly, $B$'s CKA heatmap is visually almost indistinguishable from the three distilled students', reaching the same saturation pattern in deep layers. This is the clearest evidence in this work that hidden-state geometric similarity to the teacher, as captured by CKA, is largely insensitive to whether a model was distilled at all, at least on IMDb.
 
-\subsection{Functional Evaluation and Comparison}
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{imdb_cka_heatmap.png}
+\caption{Linear CKA between teacher and student hidden states (all layers, including the embedding layer, $N=100$ prompts), for all four IMDb students.}
+\label{fig:imdb_cka}
+\end{figure}
 
-As discussed previously, since $P$ is a general-purpose pretrained model \cite{cerebras2023slimpajama, zhang2024tinyllama}, it is reasonable to expect that the tokens most relevant to sentiment analysis tasks correspond to those that genuinely convey sentiment information. This is precisely what is observed in the teacher's \textbf{LIME} explanations, both for the positive and negative examples. A similar behavior is observed in the \textbf{SHAP} explanations, where positively connoted words receive positive contributions and negatively connoted words receive negative contributions.
+\subsection{AG News: Main Study}\label{sec:agnews-results}
 
-In contrast, both $S_1$ and $S_2$ exhibit explanations that differ substantially from those of $P$. The \textbf{LIME} and \textbf{SHAP} explanations generated for the student models frequently assign high importance to words that carry little or no sentiment information. Across all analyzed examples, the explanations produced by the students cannot be considered satisfactory from a semantic perspective. Despite this, $S_2$ achieves strong predictive performance on the dataset, suggesting that accurate predictions are not necessarily associated with meaningful explanations.
+We now turn to AG News, the four-class, non-binary classification task introduced in Section~\ref{sec:setup-agnews}, used as the main experimental study of this work. The same five models (Table~\ref{tab:model_family}), the same training procedure, and the same metrics as in the IMDb pilot (Section~\ref{sec:imdb-results}) are used throughout, now reported in full depth.
 
-For all models, \textbf{Integrated Gradients} produced results that were difficult to interpret. In most cases, the words receiving the largest attribution scores do not appear to carry sufficient sentiment-related semantic information to justify their importance. This behavior may be related to the choice of the \textit{padding token} as the baseline used for attribution computation.
+\subsubsection{Evaluation on the \textbf{Test} Set}\label{sec:agnews-test-eval}
 
-\subsection{Layer-wise Representation Comparison}
+Table~\ref{tab:agnews_perf} reports macro-averaged classification metrics on the full $7600$-example \textbf{test} set. In sharp contrast with IMDb, the non-distilled baseline $B$ achieves the \emph{highest} raw accuracy of all five models, ahead of every distilled variant and the teacher itself: $B > S_{bad} > S_2 > S_1 > P$. This is a central finding of this study and is discussed further in Section~\ref{sec:distillation-value}.
 
-The results obtained from the attention map comparison metrics exhibit a consistent pattern across all evaluated measures: the first layer ($i=0$) systematically shows the highest similarity between the student models and the teacher. For cosine similarity, $S_1$ and $S_2$ achieve values of $0.9271$ and $0.9530$, respectively, when compared against $P_{avg}$, while the $JS$ divergence decreases to $0.0122$ and $0.0086$, and the Frobenius distance is reduced to $1.3432$ and $1.0846$. This behavior is markedly different from that observed in the remaining layers, where all metrics indicate substantially lower alignment with the teacher model.
+\begin{table}[h!]
+\centering
+\caption{Performance metrics (macro-averaged) on the generative classification task, evaluated on the full \textbf{test} set ($7600$ examples), for all five AG News models.}
+    \begin{tabular}{|l|c|c|c|c|c|}
+        \hline
+        Metric & $P$ & $B$ & $S_{bad}$ & $S_1$ & $S_2$ \\ \hline
+        Accuracy & $0.8487$ & $0.8862$ & $0.8833$ & $0.8784$ & $0.8804$ \\
+        Precision & $0.8558$ & $0.8865$ & $0.8850$ & $0.8784$ & $0.8816$ \\
+        Recall & $0.8487$ & $0.8862$ & $0.8833$ & $0.8784$ & $0.8804$ \\
+        F1 score & $0.8479$ & $0.8862$ & $0.8837$ & $0.8784$ & $0.8807$ \\ \hline
+    \end{tabular}
+    \label{tab:agnews_perf}
+\end{table}
 
-Since the Frobenius distance between two attention maps of dimension $2048 \times 2048$ is upper bounded by $\sqrt{2 \cdot 2048} = 64$, the observed distances can be interpreted in relative terms. In the first layer, distances of $1.3432$ and $1.0846$ correspond to only $2.1\%$ and $1.7\%$ of the theoretical maximum, indicating an almost complete alignment between the students' attention maps and the teacher average. In contrast, intermediate layers reach distances close to $40$ (for example, $i=3$ with $39.6938$ for $S_1$), corresponding to approximately $62\%$ of the maximum bound and therefore indicating substantial differences. Comparisons against $P_r$ in the first layer yield distances of approximately $11.4$, corresponding to about $18\%$ of the bound, which is still considerably larger than the values obtained against $P_{avg}$.
+Table~\ref{tab:agnews_perclass} reports the per-class breakdown. Across all five models, \textit{Business} is consistently the weakest class and \textit{Sports} the strongest; the teacher in particular struggles with \textit{Business} (recall $0.7047$), which it frequently confuses with \textit{Science} ($344$ of $1900$ Business articles predicted \textit{Science}, out of $562$ total teacher errors on that class). All four students reduce this confusion relative to the teacher (e.g.\ $B$: $224$ Business$\to$Science errors; $S_1$: $222$; $S_2$: $227$; $S_{bad}$: $206$), consistent with their higher overall accuracy, though none eliminates it.
 
-These results suggest a possible transfer of structural information from the teacher's early attention representations to the student models. One possible interpretation is that deeper layers develop increasingly abstract and teacher-specific representations, making them more difficult to transfer to a model with half the depth, whereas the first layer, which directly processes the input representations, captures more general and transferable patterns. However, it should be noted that this work did not evaluate a non-distilled model with the same architecture as the students. Consequently, it is not possible to rule out the possibility that the observed similarity in the first layer arises from the task and dataset themselves rather than from the distillation process alone.
+\begin{table}[h!]
+\centering
+\caption{Per-class Precision (P), Recall (R), and F1 for all five AG News models.}
+\footnotesize
+\begin{tabular}{|l|l|c|c|c|c|c|}
+\hline
+Class & & $P$ & $B$ & $S_{bad}$ & $S_1$ & $S_2$ \\ \hline
+\multirow{3}{*}{World}
+ & P & $0.776$ & $0.901$ & $0.929$ & $0.892$ & $0.921$ \\
+ & R & $0.873$ & $0.891$ & $0.860$ & $0.893$ & $0.873$ \\
+ & F1 & $0.821$ & $0.896$ & $0.893$ & $0.892$ & $0.896$ \\ \hline
+\multirow{3}{*}{Sports}
+ & P & $0.974$ & $0.948$ & $0.946$ & $0.946$ & $0.951$ \\
+ & R & $0.878$ & $0.949$ & $0.948$ & $0.946$ & $0.951$ \\
+ & F1 & $0.924$ & $0.948$ & $0.947$ & $0.946$ & $0.951$ \\ \hline
+\multirow{3}{*}{Business}
+ & P & $0.859$ & $0.859$ & $0.834$ & $0.832$ & $0.823$ \\
+ & R & $0.705$ & $0.831$ & $0.848$ & $0.826$ & $0.833$ \\
+ & F1 & $0.774$ & $0.845$ & $0.841$ & $0.829$ & $0.828$ \\ \hline
+\multirow{3}{*}{Science}
+ & P & $0.815$ & $0.839$ & $0.830$ & $0.844$ & $0.832$ \\
+ & R & $0.939$ & $0.874$ & $0.876$ & $0.848$ & $0.866$ \\
+ & F1 & $0.872$ & $0.856$ & $0.853$ & $0.846$ & $0.849$ \\ \hline
+\end{tabular}
+\label{tab:agnews_perclass}
+\end{table}
 
-It is also noteworthy that the high similarity in the first layer is observed in both student models, regardless of whether the training procedure includes the additional token-level $KL$ term. This suggests that, if the phenomenon is indeed a consequence of distillation, it does not depend on the additional loss introduced in $S_2$, but rather on the distillation process itself.
+Table~\ref{tab:agnews_kl} reports average $KL$ divergence to the teacher, computed over the full \textbf{test} set. Unlike accuracy, $KL$ divergence follows the expected monotonic ordering with distillation strength, $S_2 < S_1 < S_{bad} < B$, at both temperatures -- the class-restricted student $S_2$ is the most faithful to the teacher's output distribution, and the non-distilled $B$ the least, by a wide margin. This is the clearest evidence in this study that, whatever its effect on accuracy, distillation reliably and monotonically pulls the student's output distribution toward the teacher's.
 
-Regarding the effective ranks, both $PR$ and $ER$ reveal that the students consistently occupy an intermediate position between $P_{avg}$ and $P_r$. While $P_{avg}$ exhibits highly concentrated attention distributions, with $PR$ values close to $1$ in most layers and highly variable $ER$ values, $P_r$ produces considerably more dispersed representations, with effective ranks close to $1800$ across all layers while maintaining $PR \approx 2$. The student models, in contrast, display intermediate values that increase toward deeper layers, suggesting that their attention maps are more diffuse than the teacher average but do not reach the level of dispersion characteristic of the rollout representation. This observation is consistent with the fact that rollout accumulates attention across all teacher layers, capturing long-range dependencies that a shallower model cannot directly reproduce. As in the case of the first-layer similarity, determining whether this intermediate behavior is induced by distillation or emerges naturally from the task would require comparison against a non-distilled model of identical architecture.
+\begin{table}[h!]
+\centering
+\caption{Average $KL$ divergence to the teacher $P$, computed over the full \textbf{test} set ($7600$ examples), at temperatures $T=1$ and $T=2$.}
+    \begin{tabular}{|l|c|c|c|c|}
+        \hline
+        & $B$ & $S_{bad}$ & $S_1$ & $S_2$ \\ \hline
+        $KL_{T=1}$ & $2.0802$ & $0.6298$ & $0.2786$ & $0.2477$ \\
+        $KL_{T=2}$ & $1.7844$ & $0.4183$ & $0.2285$ & $0.2465$ \\ \hline
+    \end{tabular}
+    \label{tab:agnews_kl}
+\end{table}
 
-\subsection{Global Representation Comparison}
+\subsubsection{Functional Evaluation and Explanation Comparison}\label{sec:agnews-functional-eval}
 
-The most notable result of the global comparisons is the high similarity between the rollout representations of both students and the global average attention representation of the teacher. Both $S_{1_r}$ and $S_{2_r}$ achieve cosine similarities of $0.9534$ and $0.9773$ with respect to $P_{avg}$, together with Frobenius distances of $6.8544$ and $4.7195$, respectively. These values are substantially lower than those observed in the remaining teacher-student comparisons.
+Figure~\ref{fig:agnews_lime_business} illustrates \textbf{LIME} explanations for a representative \textit{Business}-class example, across all five models -- \textit{Business} is chosen as the illustrative class given its weak performance above. As on IMDb, the teacher's explanation is qualitatively more topic-relevant than any student's, and this qualitative impression is again confirmed systematically below.
 
-However, this result should be interpreted with caution. Both rollout and average attention representations are row-stochastic matrices, yet they converge toward more uniform distributions through different mechanisms: rollout through the successive multiplication of stochastic matrices, which progressively mixes attention distributions, and averaging through the direct aggregation of individual distributions. Consequently, it cannot be ruled out that part of the observed similarity is an artifact of this convergence toward uniformity rather than a direct consequence of the distillation process itself. Validating this hypothesis would require comparison against the rollout representation of a non-distilled model with the same architecture.
+\begin{figure*}[t]
+\centering
+\begin{subfigure}{0.19\linewidth}\includegraphics[width=\linewidth]{teacher_lime_business.png}\caption{$P$}\end{subfigure}
+\begin{subfigure}{0.19\linewidth}\includegraphics[width=\linewidth]{baseline_lime_business.png}\caption{$B$}\end{subfigure}
+\begin{subfigure}{0.19\linewidth}\includegraphics[width=\linewidth]{bad_student_lime_business.png}\caption{$S_{bad}$}\end{subfigure}
+\begin{subfigure}{0.19\linewidth}\includegraphics[width=\linewidth]{student_lime_business.png}\caption{$S_1$}\end{subfigure}
+\begin{subfigure}{0.19\linewidth}\includegraphics[width=\linewidth]{student_local_lime_business.png}\caption{$S_2$}\end{subfigure}
+\caption{\textbf{LIME} explanations for a representative \textit{Business}-class AG News example, across all five models, computed using $5000$ random word-removal perturbations of the input text.}
+\label{fig:agnews_lime_business}
+\end{figure*}
 
-In contrast, the mean attention representations of the students exhibit only moderate similarity with respect to $P_{avg}$, with cosine similarities of $0.2492$ and $0.3478$ for $S_1$ and $S_2$, respectively, and Frobenius distances close to $21$. This indicates that the average attention maps of the students do not faithfully reproduce those of the teacher.
+Tables~\ref{tab:agnews_lime_agg}, \ref{tab:agnews_shap_agg}, and~\ref{tab:agnews_ig_agg} report the aggregate agreement metrics over $N=100$ held-out examples ($k=10$), analogous to Section~\ref{sec:functional-eval}. Here, the teacher's own agreement-with-itself is trivially $1$ (or undefined for faithfulness-independent metrics) and is omitted, reporting only its faithfulness.
 
-As observed in the layer-wise analysis, both students produce almost identical global representations. The cosine similarity reaches $0.9865$ between the mean representations and $0.9953$ between the rollout representations. This further supports the observation that the additional token-level $KL$ term introduced in $S_2$ does not produce substantial changes in the learned attention patterns.
+\begin{table}[h!]
+\centering
+\caption{\textbf{LIME} aggregate agreement metrics (vs.\ teacher), AG News, $N=100$, $k=10$.}
+\footnotesize
+\begin{tabular}{|l|c|c|c|c|c|}
+\hline
+Model & Jaccard@10 & Spearman & Pearson & Sign agr. & Faithf. \\ \hline
+$P$ & -- & -- & -- & -- & $0.138$ \\
+$B$ & $0.336$ & $0.321$ & $0.418$ & $0.758$ & $0.306$ \\
+$S_{bad}$ & $0.348$ & $0.280$ & $0.405$ & $0.762$ & $0.402$ \\
+$S_1$ & $0.342$ & $0.307$ & $0.436$ & $0.791$ & $0.299$ \\
+$S_2$ & $0.358$ & $0.343$ & $0.457$ & $0.814$ & $0.432$ \\ \hline
+\end{tabular}
+\label{tab:agnews_lime_agg}
+\end{table}
 
-With respect to the global spectral analysis, the teacher rollout exhibits both $PR$ and $ER$ values close to $1$, indicating an extremely concentrated global representation, consistent with the convergence toward uniformity discussed previously. The student rollout representations display a similar behavior, although with slightly larger values ($ER \approx 2.2$--$2.4$). In contrast, the mean representations of the students exhibit substantially larger effective ranks ($ER \approx 336$--$362$), suggesting that the average of their attention maps utilizes a much broader set of effective components than the teacher, whose global average representation attains an $ER$ of only $31.1$.
+\begin{table}[h!]
+\centering
+\caption{\textbf{SHAP} aggregate agreement metrics (vs.\ teacher), AG News, $N=100$, $k=10$.}
+\footnotesize
+\begin{tabular}{|l|c|c|c|c|c|}
+\hline
+Model & Jaccard@10 & Spearman & Pearson & Sign agr. & Faithf. \\ \hline
+$P$ & -- & -- & -- & -- & $0.003$ \\
+$B$ & $0.315$ & $0.270$ & $0.337$ & $0.723$ & $-0.003$ \\
+$S_{bad}$ & $0.317$ & $0.275$ & $0.344$ & $0.736$ & $0.000$ \\
+$S_1$ & $0.320$ & $0.267$ & $0.321$ & $0.722$ & $0.000$ \\
+$S_2$ & $0.311$ & $0.262$ & $0.344$ & $0.715$ & $-0.001$ \\ \hline
+\end{tabular}
+\label{tab:agnews_shap_agg}
+\end{table}
 
-\newpage
+\begin{table}[h!]
+\centering
+\caption{\textbf{Integrated Gradients} (zero baseline) aggregate agreement metrics (vs.\ teacher), AG News, $N=100$, $k=10$.}
+\footnotesize
+\begin{tabular}{|l|c|c|c|c|c|}
+\hline
+Model & Jaccard@10 & Spearman & Pearson & Sign agr. & Faithf. \\ \hline
+$P$ & -- & -- & -- & -- & $0.054$ \\
+$B$ & $0.891$ & $0.022$ & $-0.153$ & $0.509$ & $0.067$ \\
+$S_{bad}$ & $0.883$ & $0.040$ & $-0.087$ & $0.528$ & $0.163$ \\
+$S_1$ & $0.876$ & $-0.036$ & $0.004$ & $0.470$ & $0.138$ \\
+$S_2$ & $0.888$ & $0.013$ & $-0.247$ & $0.504$ & $0.340$ \\ \hline
+\end{tabular}
+\label{tab:agnews_ig_agg}
+\end{table}
+
+The pattern observed on IMDb replicates on AG News: $S_2$ is the best- or near-best-aligned student on \textbf{LIME} and \textbf{SHAP} across nearly every agreement metric, and clearly the most faithful of the four on both \textbf{LIME} and \textbf{IG}; $B$ and $S_1$ are again the weakest. \textbf{SHAP} faithfulness is close to zero (even slightly negative) for all four students and for the teacher itself, indicating that masking the top-$10$ SHAP-attributed words barely changes the predicted class probability for any model on this task -- a pattern discussed further as a possible limitation of the faithfulness metric itself in Section~\ref{sec:limitations}. As on IMDb, \textbf{IG} again shows high top-$k$ overlap ($0.876$--$0.891$) alongside near-zero or negative rank/value correlations, reinforcing that IG's apparent agreement across models is driven by selecting similar token sets rather than similar importance orderings.
+
+Table~\ref{tab:agnews_stability} reports \textbf{LIME} stability. The teacher is again the most stable, and $S_1$ the least, mirroring IMDb.
+
+\begin{table}[h!]
+\centering
+\caption{\textbf{LIME} stability (mean pairwise Jaccard@10 across $5$ seeds, $N=20$), AG News.}
+\begin{tabular}{|l|c|c|c|c|c|}
+\hline
+Model & $P$ & $B$ & $S_{bad}$ & $S_1$ & $S_2$ \\ \hline
+Stability & $0.774$ & $0.669$ & $0.639$ & $0.615$ & $0.688$ \\ \hline
+\end{tabular}
+\label{tab:agnews_stability}
+\end{table}
+
+\subsubsection{Representational Comparison}\label{sec:agnews-repr}
+
+\paragraph{Layer-wise Comparisons}
+
+Figure~\ref{fig:agnews_layer_div} and Table~\ref{tab:agnews_cosine} report the layer-wise cosine similarity between each student's attention map $i$ and the teacher's $P_{avg}$ (layers $2i,2i+1$). As on IMDb, all four models start near-identically similar to the teacher at $i=0$ ($\ge0.96$). From $i=1$ onward, however, the pattern found on IMDb does \emph{not} replicate: $B$ is \emph{not} consistently the least similar to the teacher. At $i=1$, $S_{bad}$ is the most similar ($0.694$) and $B$, $S_1$, $S_2$ are all similarly low ($0.30$--$0.37$); at several deeper layers (e.g.\ $i=4$: $B=0.517$, the highest of the four; $i=8$: $B=0.418$, again the highest), the non-distilled baseline is at least as similar to the teacher's attention as any distilled student. This is the sharpest finding of this work regarding representational transfer: on the more complex AG News task, distillation does not reliably confer greater attention-level similarity to the teacher than a non-distilled model of the same reduced architecture achieves on its own.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{agnews_layer_divergence_profiles.png}
+\caption{Layer-wise cosine similarity, Frobenius distance, and $JS$ divergence between each student's attention map $i$ and the teacher's $P_{avg}$ (layers $2i,2i+1$), for all four AG News students.}
+\label{fig:agnews_layer_div}
+\end{figure}
+
+\begin{table}[h!]
+\centering
+\caption{Cosine similarity between each student's attention map $i$ and the teacher's $P_{avg}$ (layers $2i,2i+1$), AG News.}
+    \begin{tabular}{|c|c|c|c|c|}
+        \hline
+        $i$ & $B$ & $S_{bad}$ & $S_1$ & $S_2$ \\
+        \hline
+        0 & $0.9809$ & $0.9648$ & $0.9679$ & $0.9748$ \\
+        1 & $0.3683$ & $0.6935$ & $0.3014$ & $0.3689$ \\
+        2 & $0.4252$ & $0.3180$ & $0.2305$ & $0.3674$ \\
+        3 & $0.4354$ & $0.3881$ & $0.2217$ & $0.2284$ \\
+        4 & $0.5175$ & $0.3454$ & $0.2904$ & $0.3445$ \\
+        5 & $0.3318$ & $0.3981$ & $0.2800$ & $0.2970$ \\
+        6 & $0.2992$ & $0.3415$ & $0.3367$ & $0.2977$ \\
+        7 & $0.2722$ & $0.3428$ & $0.3333$ & $0.2775$ \\
+        8 & $0.4182$ & $0.2777$ & $0.2723$ & $0.3127$ \\
+        9 & $0.2517$ & $0.3962$ & $0.3168$ & $0.2929$ \\
+        10 & $0.3111$ & $0.2778$ & $0.2262$ & $0.2640$ \\
+        \hline
+    \end{tabular}
+    \label{tab:agnews_cosine}
+\end{table}
+
+The Frobenius distance (Table~\ref{tab:agnews_frobenius}) and row-averaged $JS$ divergence (not tabulated, following the same layer-wise profile as Figure~\ref{fig:agnews_layer_div}) tell the same story as on IMDb: all four models are nearly indistinguishable from one another on these metrics, with the familiar profile of near-perfect alignment at $i=0$ ($\le1.5$, $\ll2\%$ of the bound of $64$), a peak around $i=2$--$3$ ($\approx37$--$41$, $\approx58$--$63\%$ of the bound), and stabilization around $17$--$20$ in later layers.
+
+\begin{table}[h!]
+\centering
+\caption{Frobenius distance between each student's attention map $i$ and the teacher's $P_{avg}$ (layers $2i,2i+1$), AG News.}
+    \begin{tabular}{|c|c|c|c|c|}
+        \hline
+        $i$ & $B$ & $S_{bad}$ & $S_1$ & $S_2$ \\
+        \hline
+        0 & $1.08$ & $1.46$ & $1.39$ & $1.22$ \\
+        1 & $19.94$ & $17.22$ & $20.39$ & $19.95$ \\
+        2 & $39.22$ & $40.16$ & $40.64$ & $39.64$ \\
+        3 & $37.78$ & $38.51$ & $39.48$ & $39.45$ \\
+        4 & $21.42$ & $22.96$ & $23.26$ & $22.91$ \\
+        5 & $21.24$ & $20.92$ & $21.62$ & $21.50$ \\
+        6 & $18.28$ & $18.01$ & $18.03$ & $18.27$ \\
+        7 & $18.05$ & $17.52$ & $17.57$ & $17.91$ \\
+        8 & $17.33$ & $18.31$ & $18.34$ & $18.10$ \\
+        9 & $19.00$ & $17.93$ & $18.42$ & $18.58$ \\
+        10 & $19.33$ & $19.52$ & $19.82$ & $19.62$ \\
+        \hline
+    \end{tabular}
+    \label{tab:agnews_frobenius}
+\end{table}
+
+Spectrally (not tabulated in full for brevity), the teacher's $P_{avg}$ is again close to rank-one throughout, $P_r$ is highly dispersed ($ER\approx1650$--$2026$), and all four students occupy an intermediate, layer-increasing position, with no consistent ordering among $B$, $S_{bad}$, $S_1$, $S_2$ -- the same qualitative picture as on IMDb.
+
+Finally, cross-student comparisons (not tabulated) show that $S_{bad}$, $S_1$, and $S_2$ remain considerably more similar to \emph{each other} (cosine $0.87$--$0.98$ across layers) than any of them is to the teacher (as low as $0.22$--$0.40$ in mid layers), while $B$ is comparably similar to the three distilled students (cosine $0.66$--$0.98$) as they are to each other -- further evidence that the three distillation variants converge toward a shared representational regime that is not obviously closer to the teacher than $B$'s independently-trained one.
+
+\paragraph{Global Comparisons}
+
+Table~\ref{tab:agnews_global} reports global comparisons. As on IMDb, the students' rollout representations align strongly with the teacher's global average ($\cos\ge0.97$), while their average maps align only moderately ($\cos\approx0.33$--$0.44$); as at the layer-wise level, $B$ participates in this pattern to a similar degree as the distilled students; the cosine similarity for $S_{1,avg}$ vs.\ $P_{avg}$ could not be recovered due to the same type of logging error found in the IMDb notebook.
+
+\begin{table}[h!]
+\centering
+\caption{Global attention comparisons (whole-model average and rollout maps) against the teacher's global average ($P_{avg}$) and rollout ($P_r$), AG News.}
+\small
+\begin{tabular}{|l|c|c|}
+        \hline
+        Comparison & Cosine & $d_F$ \\
+        \hline
+        $B_{avg}$--$P_{avg}$ & $0.4085$ & $20.63$ \\
+        $B_{avg}$--$P_r$ & $0.3204$ & $43.69$ \\
+        $B_{r}$--$P_{avg}$ & $0.9856$ & $11.34$ \\
+        $B_{r}$--$P_r$ & $0.9907$ & $13.59$ \\
+        $S_{bad,avg}$--$P_{avg}$ & $0.3995$ & $20.76$ \\
+        $S_{bad,avg}$--$P_r$ & $0.2981$ & $43.92$ \\
+        $S_{bad,r}$--$P_{avg}$ & $0.9811$ & $10.07$ \\
+        $S_{bad,r}$--$P_r$ & $0.9854$ & $15.61$ \\
+        $S_{1,avg}$--$P_{avg}$ & -- & $21.34$ \\
+        $S_{1,avg}$--$P_r$ & $0.1898$ & $44.53$ \\
+        $S_{1,r}$--$P_{avg}$ & $0.9786$ & $7.40$ \\
+        $S_{1,r}$--$P_r$ & $0.9804$ & $18.94$ \\
+        $S_{2,avg}$--$P_{avg}$ & $0.3271$ & $21.18$ \\
+        $S_{2,avg}$--$P_r$ & $0.2231$ & $44.33$ \\
+        $S_{2,r}$--$P_{avg}$ & $0.9745$ & $5.66$ \\
+        $S_{2,r}$--$P_r$ & $0.9741$ & $22.18$ \\
+        \hline
+    \end{tabular}
+\label{tab:agnews_global}
+\end{table}
+
+Spectrally at the global level (not tabulated in full), the teacher's global rollout is close to rank-one, while every student's average map is markedly more dispersed ($ER$ in the low hundreds), again with $B$ comparable to the distilled students rather than clearly lower.
+
+\subsubsection{Per-Head Attention Similarity and Hidden-State Comparison}
+
+Figure~\ref{fig:agnews_head_heatmap} and Figure~\ref{fig:agnews_cka} report the per-head cosine-similarity and linear-CKA analyses (Section~\ref{sec:cka-def}), computed identically to their IMDb counterparts (Section~\ref{sec:head-heatmaps}, Section~\ref{sec:cka-results}). Both replicate the IMDb findings closely: per-head similarity is diffuse and modest ($\approx0.2$--$0.5$) with a vertical-band structure, and, unlike on IMDb, $B$'s per-head heatmap is not visibly weaker than the distilled students' -- consistent with the layer-wise finding above that distillation does not clearly improve attention-level alignment on this task. The CKA heatmaps again show the same near-universal, depth-dependent saturation pattern (low CKA with early teacher layers, near-$1$ CKA with deep teacher layers regardless of student layer) for all four students, $B$ included, essentially indistinguishable from one another -- reinforcing, on a second dataset, that hidden-state geometric similarity to the teacher is largely insensitive to whether a model was distilled at all.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{agnews_head_similarity_heatmap.png}
+\caption{Per-head cosine similarity between teacher and student attention heads, averaged over $11$ matched layer pairs and $N=50$ prompts, for all four AG News students.}
+\label{fig:agnews_head_heatmap}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{agnews_cka_heatmap.png}
+\caption{Linear CKA between teacher and student hidden states (all layers, including the embedding layer, $N=100$ prompts), for all four AG News students.}
+\label{fig:agnews_cka}
+\end{figure}
+
+\subsection{Does Distillation Add Value Beyond Depth Reduction?}\label{sec:distillation-value}
+
+The model family of Table~\ref{tab:model_family}, evaluated identically on both datasets, allows us to directly address the question motivating the baseline models introduced in this revision: how much of the behavior previously attributed to distillation is actually attributable to training a smaller model on the same task, independently of distillation? The answer differs by which property is examined.
+
+\textbf{Classification accuracy} is task-dependent. On IMDb, distillation helps substantially: $S_2$ far outperforms the non-distilled baseline ($0.9343$ vs.\ $0.8575$ accuracy, Table~\ref{tab:imdb_perf}). On AG News, the opposite holds: the non-distilled baseline outperforms every distilled variant, including $S_2$ ($0.8862$ vs.\ $0.8804$, Table~\ref{tab:agnews_perf}). Whether distillation improves task accuracy beyond depth reduction alone cannot, therefore, be assumed to generalize across tasks.
+
+\textbf{Distributional fidelity ($KL$ divergence to the teacher)} is the one property that behaves consistently and predictably: on both IMDb ($KL_{T=2}$: $B=1.69$ vs.\ $S_1,S_2\approx0.13$--$0.19$, Table~\ref{tab:imdb_kl}) and AG News ($KL_{T=2}$: $B=1.78$ vs.\ $S_1,S_2\approx0.23$--$0.25$, Table~\ref{tab:agnews_kl}), the non-distilled baseline is by far the least faithful to the teacher's output distribution, and fidelity increases monotonically with distillation strength ($B>S_{bad}>S_1\gtrsim S_2$ or $B>S_{bad}>S_1>S_2$). This is distillation's most robust, reproducible effect across both tasks, and it holds regardless of whether accuracy improves.
+
+\textbf{Explanatory alignment} is real but modest. On both datasets, $S_2$ is consistently the best- or near-best-aligned student with the teacher on \textbf{LIME} and \textbf{SHAP} agreement and faithfulness metrics (Tables~\ref{tab:imdb_lime_agg}--\ref{tab:imdb_shap_agg} and~\ref{tab:agnews_lime_agg}--\ref{tab:agnews_shap_agg}), and $B$ is typically among the weakest. However, the gap between $B$ and the best-aligned student is small relative to the $KL$ gap above, and \textbf{Integrated Gradients} shows no consistent ordering by distillation strength at all on either dataset.
+
+\textbf{Representational (attention and hidden-state) alignment} shows the weakest and least consistent evidence for a distillation-specific effect. At the level of full attention maps, $B$ is clearly the least similar to the teacher on IMDb (Section~\ref{sec:imdb-repr}) but is comparable to, or in several layers more similar than, the distilled students on AG News (Section~\ref{sec:agnews-repr}). At the level of individual attention heads and of hidden-state geometry (linear CKA), $B$ is visually indistinguishable from the distilled students on \emph{both} datasets (Sections~\ref{sec:head-heatmaps}--\ref{sec:cka-results} and their AG News counterparts) -- the clearest indication in this work that much of the previously reported "teacher-student representational similarity" reflects shared architecture, embeddings, and task exposure rather than a specific product of the distillation objective.
+
+Taken together, these results indicate that knowledge distillation's one dependable contribution, across tasks and independently of whether it improves accuracy, is to pull the student's output distribution toward the teacher's; its effects on classification accuracy, explanatory alignment, and internal representational similarity are comparatively small, inconsistent across datasets, and in the case of fine-grained representational similarity, largely absent once a non-distilled baseline of the same architecture is available for comparison.
+
+\subsection{Limitations}\label{sec:limitations}
+
+Earlier iterations of this work lacked a model sharing the students' architecture but trained without distillation; this revision addresses that gap directly with $B$ and $S_{bad}$ (Section~\ref{sec:distillation-value}). Even with these controls in hand, however, several limitations remain. Only two points along the distillation-strength spectrum were tested beyond the two original students ($\alpha=1$ for $B$, $\alpha=0.9$ for $S_{bad}$); a denser sweep over $\alpha$, $\beta$, and the temperature $T$ would be needed to characterize the transition between these regimes more precisely, and to determine whether the AG News finding that $B$ matches or exceeds the distilled students' attention-level similarity to the teacher (Section~\ref{sec:agnews-repr}) holds at other points in this space. Additionally, $B$ and $S_{bad}$ are trained on the same data and for the same number of epochs as $S_1$ and $S_2$, but the four variants are not otherwise matched for compute or number of gradient updates, since the distillation terms add computational overhead per step; a compute-matched comparison was outside the scope of this work.
+
+A further limitation is the hardware available for this work: all training and evaluation was carried out on a single consumer GPU (an NVIDIA RTX 5070 Ti with $16$GB of VRAM), which was the binding constraint on the scope of the study -- it determined how many datasets, how large a scale for each dataset, and how many additional model or teacher-architecture variants could be explored within a reasonable timeframe, more so than any of the methodological choices discussed above. Relatedly, all experiments use a single teacher architecture (TinyLlama-1.1B); while nothing in our results suggests that this choice is as binding a constraint as compute, evaluating additional teacher architectures, and additional or larger datasets, remains a natural direction for future work once more compute is available.
+
+The explanation-agreement and faithfulness metrics introduced in this revision (Section~\ref{sec:xai-agreement-metrics}) raise a conceptual question also noted by an early reviewer of this work: when \textbf{LIME}/\textbf{SHAP} explanations disagree between teacher and student, or when a faithfulness or rank-correlation metric returns a low or inconsistent value, it is not always possible to attribute this cleanly to a failure of distillation as opposed to a limitation of the explanation method itself. Two observations in this study point in this direction. First, \textbf{SHAP} faithfulness is close to zero (and occasionally negative) for \emph{every} model, including the teacher, on both datasets (Tables~\ref{tab:imdb_shap_agg} and~\ref{tab:agnews_shap_agg}) -- since this pattern is not specific to the distilled students, it may reflect a mismatch between the masking-based perturbation used to compute faithfulness and the behavior of a decoder-only generative-classification head, rather than a genuine absence of faithful explanations. Second, \textbf{Integrated Gradients} consistently shows high top-$k$ token overlap alongside near-zero rank and value correlation across every model and both datasets, a combination that is more naturally read as a property of the (zero-baseline) IG method on this architecture than as a finding about distillation specifically. Disentangling genuine distillation effects from such method-specific artifacts would require validating each explanation method against a known ground truth, which falls outside the scope of this work.
+
+The per-head attention-similarity and hidden-state (linear CKA) comparisons (Sections~\ref{sec:head-heatmaps}--\ref{sec:cka-results} and their AG News counterparts) are presented qualitatively, as heatmaps, since the underlying per-head and per-layer-pair numeric matrices were not retained in exportable form during the corresponding experiments; a fully quantitative version of these comparisons (e.g.\ reporting the specific head pairs or layer pairs that drive the observed patterns) is left for future work.
+
+Finally, the qualitative explanation figures (Figures~\ref{fig:imdb_lime_neg} and~\ref{fig:agnews_lime_business}) illustrate one representative example per dataset rather than the full test set; this is now a much smaller concern than in earlier iterations of this work, since the aggregate metrics of Section~\ref{sec:xai-agreement-metrics} independently quantify explanatory consistency over $N=100$ held-out examples per dataset, but the qualitative figures themselves should still be read as illustrative rather than representative in a statistical sense.
 
 \section{Conclusions}
 
-This work investigated whether the functional similarity induced by knowledge distillation preserves internal representations and explanatory mechanisms in autoregressive models. Regarding explanations, the results indicate that the answer is generally negative. The student models do not reproduce the teacher's explanatory mechanisms, assigning importance to words without sentimental content regardless of their classification performance. This demonstrates that strong task performance does not imply the transfer of explainability.
+This work investigated whether the functional similarity induced by knowledge distillation extends to internal representations and explanatory mechanisms in autoregressive Transformers, using a family of models -- a non-distilled baseline, a weakly-distilled variant, and two distilled students -- evaluated on an initial IMDb pilot and, as the main study, on the more complex, non-binary AG News task.
 
-With respect to internal representations, the evidence is partial but not discouraging. A transfer of structure is observed in the first-layer attention maps, with Frobenius distances below $2\%$ of the theoretical maximum bound, whereas intermediate and deeper layers exhibit substantial divergences. At the global level, the \textit{rollout} representations of both student models show a surprisingly high similarity to the teacher's average attention maps. In all cases, both students exhibit nearly identical behavior, suggesting that these patterns are a consequence of the distillation process itself rather than the additional fine-grained $KL$ term introduced in $S_2$.
+Regarding explanations, the answer is clearly negative on both datasets: every student, including the non-distilled baseline, assigns substantial importance to semantically or topically irrelevant tokens, and the systematic aggregate metrics introduced in this revision confirm that this is not an artifact of the particular examples chosen. Strong task accuracy does not imply meaningful explanations, nor does it consistently imply better explanatory agreement with the teacher: $S_2$ tends to be the best-aligned and most faithful student on \textbf{LIME} and \textbf{SHAP}, but the gap to the baseline is modest, and \textbf{Integrated Gradients} shows no consistent ordering at all.
 
-A central limitation of this work is the absence of a model with the same architecture trained without distillation, which prevents determining whether the observed similarity is a genuine effect of distillation or an emergent property of the task and dataset. Consequently, the central research question remains open. Nevertheless, the empirical results do not contradict the hypothesis. Both the local similarity observed in early layers and the global alignment between representations are consistent with the existence of a partial inheritance of internal structure induced by distillation, and constitute preliminary evidence that justifies further exploration of this research direction.
+Regarding internal representations, the addition of a non-distilled baseline substantially weakens the case for a distillation-specific effect that earlier iterations of this work could only speculate about. First-layer attention maps remain nearly identical across every model, distilled or not, on both datasets -- a property of the shared architecture and embeddings rather than of distillation. At the level of individual attention heads and of hidden-state geometry (linear CKA), the non-distilled baseline is visually indistinguishable from the distilled students on \emph{both} datasets. Only at the level of full, layer-averaged attention maps does a distillation-specific effect appear, and even then inconsistently: distillation helps on IMDb, where the baseline is the least similar model to the teacher throughout, but not on AG News, where the baseline matches or exceeds the distilled students' similarity to the teacher in several layers.
 
-\newpage
+The one property that behaves consistently and predictably across both datasets, independently of whether it improves accuracy, is distributional fidelity: every distilled student is far closer to the teacher's output distribution ($KL$ divergence) than the non-distilled baseline, and fidelity increases monotonically with distillation strength. Taken together, these results support a more precise version of this work's original question: functional similarity in the sense of matching the teacher's output distribution \emph{is} reliably induced by distillation, but classification performance, explanatory alignment, and fine-grained representational alignment are largely dissociable from it and from each other, and, as discussed in Section~\ref{sec:limitations}, some of the residual agreement or disagreement observed for specific explanation methods may reflect properties of those methods rather than of distillation itself. Future work should extend the $(\alpha,\beta,T)$ sweep begun here, quantify the per-head and hidden-state comparisons numerically rather than visually, and test whether these conclusions generalize to further tasks and architectures.
 
 \bibliographystyle{plain}
 \bibliography{references}
 
 \clearpage
-\section{Appendices}
+\section{Appendix}
 
 \subsection{\textbf{SHAP} Results}
 \label{anexo:shap}
 
-\begin{figure}[h!]
-\centering
-\includegraphics[scale=0.35]{teacher_shap_neg.png}
-\caption{\textbf{SHAP} explanation generated by the teacher model $P$ for a negative-class example.}
-\label{teacher_shap_neg}
-\end{figure}
-\begin{figure}[h!]
-\centering
-\includegraphics[scale=0.35]{student_shap_neg.png}
-\caption{\textbf{SHAP} explanation generated by the student model $S_1$ for a negative-class example.}
-\label{student_shap_neg}
-\end{figure}
-\begin{figure}[h!]
-\centering
-\includegraphics[scale=0.35]{student_local_shap_neg.png}
-\caption{\textbf{SHAP} explanation generated by the student model $S_2$ for a negative-class example.}
-\label{student_local_shap_neg}
-\end{figure}
+Given that the aggregate metrics of Section~\ref{sec:xai-agreement-metrics} already quantify \textbf{SHAP} and \textbf{Integrated Gradients} consistency systematically, this appendix retains only illustrative \textbf{SHAP} figures for the same representative examples used in Figures~\ref{fig:imdb_lime_neg} and~\ref{fig:agnews_lime_business}, for all five models.
 
-\begin{figure}[h!]
+\begin{figure*}[h!]
 \centering
-\includegraphics[scale=0.35]{teacher_shap_pos.png}
-\caption{\textbf{SHAP} explanation generated by the teacher model $P$ for a positive-class example.}
-\label{teacher_shap_pos}
-\end{figure}
-\begin{figure}[h!]
-\centering
-\includegraphics[scale=0.35]{student_shap_pos.png}
-\caption{\textbf{SHAP} explanation generated by the student model $S_1$ for a positive-class example.}
-\label{student_shap_pos}
-\end{figure}
-\begin{figure}[h!]
-\centering
-\includegraphics[scale=0.35]{student_local_shap_pos.png}
-\caption{\textbf{SHAP} explanation generated by the student model $S_2$ for a positive-class example.}
-\label{student_local_shap_pos}
-\end{figure}
+\begin{subfigure}{0.19\linewidth}\includegraphics[width=\linewidth]{teacher_shap_neg.png}\caption{$P$}\end{subfigure}
+\begin{subfigure}{0.19\linewidth}\includegraphics[width=\linewidth]{baseline_shap_neg.png}\caption{$B$}\end{subfigure}
+\begin{subfigure}{0.19\linewidth}\includegraphics[width=\linewidth]{bad_student_shap_neg.png}\caption{$S_{bad}$}\end{subfigure}
+\begin{subfigure}{0.19\linewidth}\includegraphics[width=\linewidth]{student_shap_neg.png}\caption{$S_1$}\end{subfigure}
+\begin{subfigure}{0.19\linewidth}\includegraphics[width=\linewidth]{student_local_shap_neg.png}\caption{$S_2$}\end{subfigure}
+\caption{\textbf{SHAP} explanations for the same representative negative-sentiment IMDb example as Figure~\ref{fig:imdb_lime_neg}, across all five models.}
+\label{fig:imdb_shap_neg}
+\end{figure*}
 
-\clearpage
-\onecolumn
-\subsection{\textbf{Integrated Gradients} Results}
-\label{anexo:ig}
-
-\begin{figure}[h!]
+\begin{figure*}[h!]
 \centering
-\includegraphics[scale=0.5]{teacher_int_grad_neg.png}
-\caption{\textbf{Integrated Gradients} explanation generated by the teacher model $P$ for a negative-class example. The \textit{padding token} was chosen as the baseline for the method.}
-\label{teacher_int_grad_neg}
-\end{figure}
-\begin{figure}[h!]
-\centering
-\includegraphics[scale=0.5]{student_int_grad_neg.png}
-\caption{\textbf{Integrated Gradients} explanation generated by the student model $S_1$ for a negative-class example. The \textit{padding token} was chosen as the baseline for the method.}
-\label{student_int_grad_neg}
-\end{figure}
-\begin{figure}[h!]
-\centering
-\includegraphics[scale=0.5]{student_local_int_grad_neg.png}
-\caption{\textbf{Integrated Gradients} explanation generated by the student model $S_2$ for a negative-class example. The \textit{padding token} was chosen as the baseline for the method.}
-\label{student_local_int_grad_neg}
-\end{figure}
-
-\begin{figure}[h!]
-\centering
-\includegraphics[scale=0.5]{teacher_int_grad_pos.png}
-\caption{\textbf{Integrated Gradients} explanation generated by the teacher model $P$ for a positive-class example. The \textit{padding token} was chosen as the baseline for the method.}
-\label{teacher_int_grad_pos}
-\end{figure}
-\begin{figure}[h!]
-\centering
-\includegraphics[scale=0.5]{student_int_grad_pos.png}
-\caption{\textbf{Integrated Gradients} explanation generated by the student model $S_1$ for a positive-class example. The \textit{padding token} was chosen as the baseline for the method.}
-\label{student_int_grad_pos}
-\end{figure}
-\begin{figure}[h!]
-\centering
-\includegraphics[scale=0.5]{student_local_int_grad_pos.png}
-\caption{\textbf{Integrated Gradients} explanation generated by the student model $S_2$ for a positive-class example. The \textit{padding token} was chosen as the baseline for the method.}
-\label{student_local_int_grad_pos}
-\end{figure}
-
-\twocolumn
+\begin{subfigure}{0.19\linewidth}\includegraphics[width=\linewidth]{teacher_shap_business.png}\caption{$P$}\end{subfigure}
+\begin{subfigure}{0.19\linewidth}\includegraphics[width=\linewidth]{baseline_shap_business.png}\caption{$B$}\end{subfigure}
+\begin{subfigure}{0.19\linewidth}\includegraphics[width=\linewidth]{bad_student_shap_business.png}\caption{$S_{bad}$}\end{subfigure}
+\begin{subfigure}{0.19\linewidth}\includegraphics[width=\linewidth]{student_shap_business.png}\caption{$S_1$}\end{subfigure}
+\begin{subfigure}{0.19\linewidth}\includegraphics[width=\linewidth]{student_local_shap_business.png}\caption{$S_2$}\end{subfigure}
+\caption{\textbf{SHAP} explanations for the same representative \textit{Business}-class AG News example as Figure~\ref{fig:agnews_lime_business}, across all five models.}
+\label{fig:agnews_shap_business}
+\end{figure*}
 
 \end{document}
