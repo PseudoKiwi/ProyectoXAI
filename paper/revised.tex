@@ -1,4 +1,5 @@
 \documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
 \usepackage[english]{babel}
 \usepackage{cite}
 \ifCLASSINFOpdf
@@ -16,43 +17,64 @@
 \hyphenation{op-tical net-works semi-conduc-tor}
 \usepackage{xcolor}
 \usepackage{subcaption}
+\usepackage{multirow}
+\usepackage{placeins}
 
-\title{Does Functional Similarity Induced by Distillation Preserve Internal Representations and Explanatory Mechanisms in Autoregressive Models?\thanks{This is a condensed, page-limited version of this paper. An extended version with complete per-layer/per-model tables, per-head and hidden-state (CKA) heatmaps, additional explanation figures, and further experimental detail is available as \texttt{main.tex} in the project repository.}}
+\title{Does Functional Similarity Induced by Distillation Preserve Internal Representations and Explanatory Mechanisms in Autoregressive Models?\thanks{This research was funded by the Agencia Nacional de Investigaci\'on e Innovaci\'on (ANII), Uruguay, under code POS\_NAC\_2025\_4\_189264.}}
 
-\author{
-\IEEEauthorblockN{Martín Perciante}
-\IEEEauthorblockA{Universidad Católica del Uruguay\\ Montevideo, Uruguay\\\href{mailto:tincho.perciante@gmail.com
-}{tincho.perciante@gmail.com}}}
+\author{\IEEEauthorblockN{1\textsuperscript{st} Martin Luca Perciante}
+\IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
+\textit{Universidad Católica del Uruguay}\\
+Montevideo, Uruguay \\
+martinluca.perciante@ucu.edu.uy}
+\and
+\IEEEauthorblockN{2\textsuperscript{nd} Given Name Surname}
+\IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
+\textit{Universidad Católica del Uruguay}\\
+Montevideo, Uruguay \\
+email address or ORCID}
+\and
+\IEEEauthorblockN{3\textsuperscript{rd} Given Name Surname}
+\IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
+\textit{Universidad Católica del Uruguay}\\
+Montevideo, Uruguay \\
+email address or ORCID}
+}
 
 \begin{document}
 
 \maketitle
 
 \begin{abstract}
-Knowledge distillation is often evaluated in terms of functional similarity between teacher and student models, typically measured through predictive performance. However, it remains unclear whether this functional similarity also implies the preservation of internal representations and explanatory mechanisms, or whether it is simply a consequence of training a smaller model on the same task. This work investigates this question in autoregressive Transformers. A TinyLlama teacher is distilled by depth into a family of $11$-layer students spanning a non-distilled baseline, a weakly-distilled variant, and two distilled variants of increasing fidelity (standard and class-restricted $KL$), isolating the effect of distillation strength from that of depth reduction alone. Internal representations are compared through layer-wise and global attention-map metrics, per-head similarity, and linear CKA on hidden states, while explanatory mechanisms are evaluated through \textbf{LIME}, \textbf{SHAP}, and \textbf{Integrated Gradients} (zero-vector baseline), moving beyond qualitative examples to aggregate agreement and faithfulness metrics. The study is conducted first as a pilot on binary IMDb sentiment classification and then, as the main experiment, on four-class AG News topic classification. Distillation does not transfer the teacher's explanatory mechanisms on either dataset. Its effect on classification accuracy is task-dependent (it helps on IMDb but not on AG News, where a non-distilled baseline outperforms every distilled variant), yet it robustly and monotonically improves distributional fidelity to the teacher on both datasets regardless of accuracy. Representational similarity is only partially, and inconsistently, attributable to distillation once a non-distilled baseline is available for comparison. These results indicate that classification performance, distributional similarity, explanatory alignment, and representational alignment are largely dissociable properties of a distilled model.
+Knowledge distillation \cite{hinton2015distilling} is often evaluated in terms of functional similarity between teacher and student models, typically measured through predictive performance. However, it remains unclear whether this functional similarity also implies the preservation of internal representations and explanatory mechanisms without explicitly imposing them. This work investigates this question in autoregressive Transformers. A \textbf{TinyLlama} \cite{zhang2024tinyllama} teacher is distilled into a family of 11 attention layer students with different training configurations. Internal representations are compared through layer-wise attention-map metrics (cosine similarity, Frobenius distance, Jensen--Shannon divergence \cite{lin1991divergence}, spectral effective rank \cite{recanatesi2022scale, roy2007effective}), per-head similarity, while explanatory mechanisms are evaluated through \textbf{LIME} \cite{ribeiro2016should}, \textbf{SHAP} \cite{lundberg2017unified}, and \textbf{Integrated Gradients} \cite{sundararajan2017axiomatic} (zero-vector baseline), moving beyond qualitative examples to aggregate agreement (Jaccard overlap, rank correlation, sign agreement) and deletion-based faithfulness metrics \cite{deyoung2020eraser}. The study is conducted on binary \textbf{IMDb} \cite{maas-EtAl:2011:ACL-HLT2011} sentiment classification and on four-class \textbf{AG News} \cite{zhang2015character} topic classification. Results show that distillation does not transfer the teacher's explanatory mechanisms on either dataset, even though it robustly and monotonically improves the student's distributional fidelity to the teacher on both datasets. Representational similarity, in turn, is only partially and inconsistently attributable to distillation: attention-level and per-head metrics show that a non-distilled baseline is as close to the teacher as the distilled students. These findings suggest that the observed similarity to the teacher is driven more by the shared data and task than by distillation itself, indicating that functional similarity does not, by itself, guarantee the preservation of a teacher's explanatory mechanisms or internal representations.
 \end{abstract}
+
+\begin{IEEEkeywords}
+Distillation, Attention, XAI, Explainability
+\end{IEEEkeywords}
 
 \section{Introduction}
 
-Explainable Artificial Intelligence (XAI) seeks to interpret and explain the behavior of complex models, which is essential in application domains where deployed systems must justify autonomous decisions and foster user trust. Autoregressive Transformer-based models have driven recent progress in Natural Language Processing (NLP), but their computational cost has motivated compression techniques such as knowledge distillation (KD), in which a smaller student model is trained to approximate the output distribution of a larger teacher \cite{hinton2015distilling}.
+Explainable Artificial Intelligence (XAI) seeks to interpret and explain the behavior of complex models, essential in domains where deployed systems must justify autonomous decisions and foster user trust. This task is particularly difficult for Large Language Models (LLMs), where probabilistic text generation replaces classification with a single class label output.
 
-Although KD targets functional behavior, it remains unclear whether it also induces similarity in the teacher's internal representations and explanatory mechanisms, or whether any such similarity is simply a byproduct of training a smaller model of the same architecture on the same task -- a question sharpened by prior work showing that different attention configurations can induce similar predictions \cite{jain2019attention}, challenging the interpretation of attention as a faithful explanation.
+Autoregressive Transformer-based models are the architecture of choice for this kind of modeling in current Natural Language Processing (NLP), driving recent progress largely by growing in parameters and complexity; the resulting computational cost has motivated compression techniques such as knowledge distillation (KD), in which a smaller model (student) is trained to approximate the output distribution of a larger model (teacher) \cite{hinton2015distilling}, alongside dataset training.
 
-This work investigates whether functional similarity induced by logit-based KD extends to representational and explanatory similarity, and, critically, disentangles this from the effect of depth reduction alone. We adopt a generative classification setting \cite{daillm}, in which target classes correspond to single vocabulary tokens, allowing internal representations to be compared directly between teacher and student. We first conduct a pilot study on binary IMDb sentiment classification, then extend the full analysis, as the main experiment, to four-class, non-binary AG News topic classification.
+Standard KD is centered on functional similarity: the same input is made to produce a similar output, regardless of the internal computations that produce it. Prior work has shown that different attention configurations can induce similar functional behavior \cite{jain2019attention}, raising the question of whether KD enforces a preference for the teacher's internal representations, or whether it can converge to different attention maps while reproducing the teacher's output distribution. Bringing XAI into this picture, different models can provide different explanations for the same example while achieving similar performance over a dataset, so this question extends naturally to explanatory mechanisms as well.
 
-In summary, this work makes the following contributions:
+This work investigates whether the functional similarity induced by logit-based KD extends to similarity in internal representations and explanatory mechanisms. We adopt a generative classification setting, in which target classes correspond to single vocabulary tokens, allowing internal representations to be compared directly between teacher and student. We conducted the experiments on binary \textbf{IMDb} sentiment classification and in \textbf{AG News} four-class topic classification.
+
+This work contributions are:
 \begin{itemize}
-    \item A family of four student variants sharing a single parameterized loss but spanning a non-distilled baseline, a weakly-distilled variant, a standard global-$KD$ variant, and a class-restricted $KD$ variant, disentangling the effect of distillation strength from that of depth reduction alone.
-    \item A multi-level representational comparison framework: layer-wise and global attention analyses (cosine similarity, Frobenius distance, $JS$ divergence, spectral effective-rank), per-head attention similarity, and linear CKA on hidden states.
-    \item A move from qualitative to systematic explanation comparison, evaluating \textbf{LIME}, \textbf{SHAP}, and \textbf{Integrated Gradients} with aggregate top-$k$ overlap, rank/value correlation, sign agreement, faithfulness, and stability metrics.
-    \item Extension of the full analysis from an initial binary pilot (IMDb) to a four-class, non-binary main study (AG News), testing whether observed patterns generalize beyond a single task.
+    \item We show that logit-based KD, even when it reproduces the teacher's output distribution with increasing fidelity, does not correspondingly transfer its explanatory mechanisms.
+    \item We show that representational similarity to the teacher (attention and per-head geometry) is not a reliable signature of distillation itself.
+    \item We show this dissociation holds across both a binary (\textbf{IMDb}) and a four-class (\textbf{AG News}) classification task, indicating it is not an artifact of a single dataset or label space.
 \end{itemize}
 
 \section{Related Work}
 
-Knowledge distillation (KD) transfers information from a high-capacity teacher to a smaller student by combining a cross-entropy term with a Kullback--Leibler ($KL$) divergence between output distributions, often softened by a temperature $T$ \cite{hinton2015distilling}. KD is widely used in deep networks and large language models, but its success is evaluated almost exclusively via functional metrics such as accuracy \cite{gou2021knowledge}, leaving open whether functional similarity coincides with similarity in internal representations or decision mechanisms. \textit{Generative classification} \cite{daillm} reformulates classification as next-token prediction restricted to single vocabulary tokens, preserving the model's original architecture and thereby enabling direct comparison of internal representations between teacher and student, which we adopt in this work.
+Knowledge distillation (KD) transfers information from a high-capacity teacher to a smaller student by adding a Kullback--Leibler ($KL$) divergence term to the loss function, often softened by a temperature $T$ \cite{hinton2015distilling}. KD is widely used in deep networks and large language models, but its success is evaluated almost exclusively via functional metrics such as accuracy \cite{gou2021knowledge}. Some works explicitly bias the loss towards representational alignment, such as Attention Distillation \cite{zhou2025attentiondistillationunifiedapproach}, which directly supervises student attention maps against the teacher's.
 
-Post-hoc explainability methods such as \textbf{LIME} \cite{ribeiro2016should} and \textbf{SHAP} \cite{lundberg2017unified} treat the model as a black box, while gradient-based methods such as \textbf{Integrated Gradients} \cite{sundararajan2017axiomatic} exploit differentiability; all three are commonly used to quantify token-level contributions to a prediction. Beyond post-hoc attribution, attention maps offer a potentially interpretable internal mechanism, but whether they constitute a faithful explanation remains contested: Jain and Wallace \cite{jain2019attention} show that alternative attention configurations can induce similar predictions, whereas Wiegreffe and Pinter \cite{wiegreffe2019attention} argue attention can still provide plausible explanations under appropriate conditions. \textbf{Attention Rollout} \cite{abnar2020quantifying} aggregates attention across layers, accounting for residual connections, to characterize global information flow. To the best of our knowledge, whether a student that closely reproduces a teacher's predictions also reproduces the internal representations and explanatory mechanisms probed by these tools -- and how much of any such reproduction is attributable to distillation itself rather than to depth reduction alone -- remains unexplored; this work addresses that gap.
+Post-hoc explainability methods such as \textbf{LIME} \cite{ribeiro2016should} and \textbf{SHAP} \cite{lundberg2017unified} treat the model as a black box, while gradient-based methods such as \textbf{Integrated Gradients} \cite{sundararajan2017axiomatic} exploit differentiability; all three are commonly used to quantify token-level contributions to a prediction. Beyond post-hoc attribution, attention maps offer a potentially interpretable internal mechanism, but whether they constitute a faithful explanation remains contested: Jain and Wallace \cite{jain2019attention} show that alternative attention configurations can induce similar predictions, whereas Wiegreffe and Pinter \cite{wiegreffe2019attention} argue attention can still provide plausible explanations under appropriate conditions.
 
 \section{Experiments}
 
@@ -60,25 +82,21 @@ Post-hoc explainability methods such as \textbf{LIME} \cite{ribeiro2016should} a
 
 The project used \textbf{Python}, \textbf{PyTorch}, Hugging Face's \textbf{transformers}, \textbf{lime}/\textbf{shap} for explanation, \textbf{SciPy} for the rank/value-correlation statistics used in the aggregate explanation metrics, and \textbf{scikit-learn} for evaluation metrics.
 
-The teacher is \textbf{TinyLlama-1.1B-Chat-v1.0} \cite{zhang2024tinyllama}, a $22$-layer decoder-only Transformer \cite{vaswani2017attention}. Every student shares the teacher's embeddings, attention mechanism, and hidden dimensions, reducing only depth to $11$ randomly-initialized blocks ($2{:}1$ layer correspondence; compression rate $CR\approx1.787$, $\approx44\%$ fewer parameters, since embeddings and the output head are kept identical).
+The teacher is \textbf{TinyLlama-1.1B-Chat-v1.0} \cite{zhang2024tinyllama}, a $22$-layer decoder-only Transformer \cite{vaswani2017attention}. Every student shares the teacher's embeddings, attention mechanism, and hidden dimensions, reducing only depth to $11$ randomly-initialized blocks ($2{:}1$ Transformer layer correspondence; compression rate $CR\approx1.787$, $\approx44\%$).
 
-Classification is reformulated as generative classification \cite{daillm}: labels are single vocabulary tokens, inputs are inserted into a fixed template, and only the class-token logits are compared at inference. For \textbf{IMDb} \cite{maas-EtAl:2011:ACL-HLT2011} ($50000$ reviews, labels \textit{positive}/\textit{negative}), the template is \texttt{"Review: \{input\} Summary:"}; filtered to the teacher's $2048$-token context, splits are $22492$/$2500$/$24995$ (train/val/test). For \textbf{AG News} \cite{zhang2015character} ($4$ classes: \textit{World}, \textit{Sports}, \textit{Business}, \textit{Sci/Tech}), the template is \texttt{"Article: \{input\}\textbackslash n\textbackslash nTheme:"}; since \textit{Sci/Tech} tokenizes to four sub-tokens, it is relabeled \textit{Science} (one token) purely to preserve the single-token framing. Splits are $30000$/$100$/$7600$ (balanced). All other hyperparameters are shared across datasets.
+The studied problem is reformulated as a generative classification \cite{schick2021exploiting}, where class-labels are single vocabulary tokens. Dataset inputs are inserted into a fixed prompt template, and only the class-token logits are compared at inference. For \textbf{IMDb} \cite{maas-EtAl:2011:ACL-HLT2011} ($50000$ reviews, labels \textit{positive}/\textit{negative}), the template is \texttt{"Review: \{input\} Summary:"}; filtered to the teacher's $2048$-token context, splits are $22492$/$2500$/$24995$ (train/val/test). For \textbf{AG News} \cite{zhang2015character} ($4$ classes: \textit{World}, \textit{Sports}, \textit{Business}, \textit{Sci/Tech}), the template is \texttt{"Article: \{input\} Theme:"}. Since \textit{Sci/Tech} tokenizes to four sub-tokens, it is relabeled \textit{Science} (one token) purely to preserve the single-token framing. Splits are $30000$/$100$/$7600$ (balanced). All other hyperparameters are shared across datasets.
 
-The teacher is fine-tuned per dataset for one epoch (lr $2\times10^{-5}$, batch size $1$, AdamW, early stopping after $5$ non-improving validation rounds). Every student is randomly initialized and trained for $3$ epochs (lr $1\times10^{-4}$, no early stopping), minimizing
+The teacher is fully fine-tuned per dataset for one epoch (lr $2\times10^{-5}$, batch size $1$, AdamW, early stopping after $5$ non-improving validation rounds). Every student is randomly initialized and trained for $3$ epochs (lr $1\times10^{-4}$, no early stopping), minimizing \eqref{eq:loss}.
 
-\[
-\mathcal{L}
-=
-\alpha\,\mathcal{L}_{CE}
-+
-(1-\alpha)\,T^2 D_{KL}(P_P \Vert P_S)
-+
-\beta\,T^2 D_{KL}(P_P^{(c)} \Vert P_S^{(c)})
-\]
+\begin{align}
+\mathcal{L} &= \alpha\,\mathcal{L}_{CE} + (1-\alpha)\,T^2 D_{KL}\left(P_P \Vert P_S\right) \notag \\
+&\quad + \beta\,T^2 D_{KL}\left(P_P^{(c)} \Vert P_S^{(c)}\right)
+\label{eq:loss}
+\end{align}
 
-with $T=2$ fixed, $P_P^{(c)},P_S^{(c)}$ the distributions restricted to the classification-relevant tokens, and $(\alpha,\beta)$ set per Table~\ref{tab:model_family}, defining a family of four students spanning no distillation ($B$) to full class-restricted distillation ($S_2$).
+with $T=2$ fixed, $P_P^{(c)},P_S^{(c)}$ the probability distributions restricted to the class-label tokens, and $(\alpha,\beta)$ set per Table~\ref{tab:model_family}, defining a family of four students.
 
-\begin{table}[h!]
+\begin{table}[bp]
 \centering
 \caption{Model family. All students share the same reduced ($11$-layer) architecture and differ only in $(\alpha,\beta)$.}
 \small
@@ -94,215 +112,188 @@ $S_2$ & random & $0.5$ & $0.25$ & $+$ class-restricted $KD$ \\ \hline
 \label{tab:model_family}
 \end{table}
 
-$B$ isolates how much teacher-student similarity is attributable to distillation itself versus simply training a smaller model on the same task; $S_{bad}$ provides an intermediate point. $S_1$ uses only the global $KD$ term; since global $KL$ divergence does not guarantee agreement on the $\argmax$ among target-class logits specifically, $S_2$ adds the class-restricted term, weighted lightly to act as a regularizer.
-
-\textbf{Integrated Gradients} uses a zero embedding vector as its baseline (not the padding token used in earlier iterations of this study). Functional evaluation compares teacher and student explanations both qualitatively, on one illustrative example per dataset, and systematically, via the aggregate metrics of Section~\ref{sec:metrics} computed over $N=100$ held-out examples per dataset. Representational comparisons use attention maps averaged over held-out samples ($N=200$), individual attention heads ($N=50$ prompts), and full hidden states via linear CKA ($N=100$ prompts). Experiments ran on an NVIDIA RTX 5070 Ti (16GB). Code and the extended version of this paper: \textbf{https://github.com/PseudoKiwi/ProyectoXAI}. Manuscript writing was assisted by Claude Sonnet 4.6 \cite{anthropic2025claude} and ChatGPT \cite{openai_chatgpt}, used exclusively for stylistic revision.
+Explanations from \textbf{LIME}, \textbf{SHAP}, and \textbf{Integrated Gradients} (zero-embedding baseline) are compared between teacher and student via aggregate metrics, computed over $N=100$ held-out examples per dataset for all three methods. Representational comparisons use the $2{:}1$ teacher-student layer correspondence: attention maps are averaged over held-out samples ($N=200$) at each layer, and student layer $i$ is then compared against the average of teacher layers $2i$ and $2i+1$. All experiments ran on an NVIDIA RTX 5070 Ti (16GB).
 
 \subsection{Comparison Metrics}\label{sec:metrics}
 
-Attention maps are row-stochastic matrices; we compare them with complementary geometric, probabilistic, and spectral measures. Given two attention matrices $A,B$, \textit{cosine similarity} is $\cos(\theta)=\langle A,B\rangle/(\|A\|_2\|B\|_2)\in[-1,1]$, and the \textit{Frobenius distance} is $d_F(A,B)=\|A-B\|_F$, bounded by $\sqrt{2n}$ for row-stochastic $n\times n$ matrices ($64$ for our $n=2048$ maps). The row-averaged \textit{Jensen--Shannon divergence} is bounded in $[0,\ln 2]$ \cite{lin1991divergence}. Spectral complexity uses the entropy-based \textit{effective rank} \cite{roy2007effective} and the \textit{Participation Ratio} \cite{recanatesi2022scale}. The same formulas are additionally applied to individual attention heads rather than head-averaged maps. Hidden-state representations (all layers, all models) are compared directly via linear \textit{Centered Kernel Alignment} (CKA) \cite{kornblith2019similarity}, a rotation/scale-invariant similarity measure bounded in $[0,1]$.
+We compare Attention maps with complementary geometric, probabilistic, and spectral measures. Given two attention matrices $A,B$ and their vectorizations $\vec A, \vec B$, we compared them via \textit{cosine similarity} $\cos(\theta)=\langle \vec A,\vec B\rangle/(\|\vec A\|_2\|\vec B\|_2)\in[-1,1]$, the \textit{Frobenius distance} $d_F(A,B)=\|A-B\|_F=\sum_{i,j}(A-B)^2_{ij}$ and the row-averaged \textit{Jensen--Shannon divergence} $\frac{1}{n}\sum_i JS(A_i||B_i)$ were $A_i$ is the $i_{th}$ row of $A$. Since Attention maps are $n \times n$ row-stochastic matrices, the \textit{Frobenius distance} is bounded by $\sqrt{2n}$ ($64$ for our $n=2048$ maps). The \textit{Jensen--Shannon divergence} is theoretically bounded in $[0,\ln 2]$ if measured in nats \cite{lin1991divergence}, where $0$ means equal distributions. For spectral metrics we propose the entropy-based \textit{effective rank} \cite{roy2007effective} and the \textit{Participation Ratio} \cite{recanatesi2022scale}.
 
-To move beyond qualitative explanation comparison, we compute aggregate metrics over held-out samples, comparing each student's word-level attribution against the teacher's: top-$k$ \textit{Jaccard overlap} ($k=10$) between the top-$k$ attributed words; \textit{Spearman/Pearson correlation} of signed scores over the common attributed vocabulary; \textit{sign agreement@$k$}; deletion-based \textit{faithfulness@$k$} \cite{deyoung2020eraser}, the drop in true-class probability after masking the top-$k$ words (computed per model, including the teacher, as a reference); and \textit{stability}, the mean pairwise Jaccard@10 across $5$ re-runs with different seeds.
+For evaluating explainability methods, we compute aggregate metrics over held-out samples, comparing each student's word-level attribution against the teacher's for every method. Metrics include top-$k$ \textit{Jaccard overlap} ($k=10$), \textit{Spearman correlation} of signed scores over the common attributed vocabulary, and deletion-based \textit{faithfulness@$k$} \cite{deyoung2020eraser}, the drop in true-class probability after masking the top-$k$ words (computed per model, including the teacher, as reference). Given \textbf{LIME's} stochastic nature, we also measure \textit{stability} as the Jaccard@10 mean across $5$ re-runs with different seeds.
 
 \subsection{Evaluation on the \textbf{Test} Set}\label{sec:test-eval}
 
-Table~\ref{tab:perf} reports classification performance for all five models on both datasets. On \textbf{IMDb}, distillation clearly helps: $S_2$ recovers most of $S_1$'s deficit and approaches the teacher, while the non-distilled $B$ lags behind. On \textbf{AG News}, the opposite holds: $B$ achieves the \emph{highest} accuracy of all five models, ahead of every distilled variant and the teacher ($B>S_{bad}>S_2>S_1>P$) -- teacher accuracy is limited chiefly by confusing \textit{Business} with \textit{Science} ($344$ of $1900$ Business articles), a confusion every student reduces without eliminating.
+Table~\ref{tab:perf} reports classification performance and average $KL$ divergence to the teacher ($T=1,2$) for all models on both datasets. On \textbf{IMDb}, distillation's effect on accuracy is mixed: only the class-restricted $S_2$ edges out the non-distilled $B$ ($0.867$ vs.\ $0.858$), while $S_{bad}$ and $S_1$ both \emph{underperform} $B$ ($0.813$ and $0.798$), i.e.\ the distillation term hurts relative to training from scratch. On \textbf{AG News}, this pattern is more pronounced: $B$ achieves the \emph{highest} accuracy of all five models ($B>S_{bad}>S_2>S_1>P$). $KL$ fidelity, by contrast, follows the same monotonic pattern on \emph{both} datasets and temperatures: $B$ is by far the least faithful, improving with distillation strength ($B>S_{bad}>S_1\gtrsim S_2$). Notably, on \textbf{IMDb} $S_1$ attains \emph{lower} $KL$ than $S_2$ despite worse accuracy: global $KL$ divergence is not a predictive proxy for classification performance, nor, as shown below, of explanatory or representational alignment.
 
-\begin{table}[h!]
+\begin{table}[tb]
 \centering
-\caption{Accuracy / F1 (macro-averaged for AG News) on the \textbf{test} set.}
+\caption{Accuracy / F1 (macro-averaged for \textbf{AG News}) on the \textbf{test} set, and average $KL$ divergence to the teacher $P$ at $T=1,2$ (\textbf{IMDb}: $N=3000$ balanced subset; \textbf{AG News}: full \textbf{test} set).}
 \small
 \begin{tabular}{|l|l|c|c|c|c|c|}
 \hline
-Dataset & Metric & $P$ & $B$ & $S_{bad}$ & $S_1$ & $S_2$ \\ \hline
-IMDb & Acc. & $0.968$ & $0.858$ & $0.813$ & $0.672$ & $0.934$ \\
-IMDb & F1 & $0.968$ & $0.857$ & $0.810$ & $0.636$ & $0.934$ \\ \hline
-AG News & Acc. & $0.849$ & $0.886$ & $0.883$ & $0.878$ & $0.880$ \\
-AG News & F1 & $0.848$ & $0.886$ & $0.884$ & $0.878$ & $0.881$ \\ \hline
+Dataset & Model & Acc. & F1 & $KL_{T=1}$ & $KL_{T=2}$ \\ \hline
+\textbf{IMDb} & $P$ & $0.954$ & $0.954$ & -- & -- \\
+\textbf{IMDb} & $B$ & $0.858$ & $0.857$ & $2.847$ & $1.686$ \\
+\textbf{IMDb} & $S_{bad}$ & $0.813$ & $0.810$ & $0.104$ & $0.132$ \\
+\textbf{IMDb} & $S_1$ & $0.798$ & $0.796$ & $0.104$ & $0.127$ \\
+\textbf{IMDb} & $S_2$ & $0.867$ & $0.867$ & $0.111$ & $0.193$ \\ \hline
+\textbf{AG News} & $P$ & $0.849$ & $0.848$ & -- & -- \\
+\textbf{AG News} & $B$ & $0.886$ & $0.886$ & $2.080$ & $1.784$ \\
+\textbf{AG News} & $S_{bad}$ & $0.883$ & $0.884$ & $0.630$ & $0.418$ \\
+\textbf{AG News} & $S_1$ & $0.878$ & $0.878$ & $0.279$ & $0.229$ \\
+\textbf{AG News} & $S_2$ & $0.880$ & $0.881$ & $0.248$ & $0.247$ \\ \hline
 \end{tabular}
 \label{tab:perf}
 \end{table}
 
-Table~\ref{tab:kl} reports average $KL$ divergence to the teacher at temperatures $T=1$ and $T=2$. Unlike accuracy, $KL$ fidelity follows the same monotonic pattern on \emph{both} datasets and at \emph{both} temperatures: $B$ is by far the least faithful, and fidelity increases with distillation strength ($B>S_{bad}>S_1\gtrsim S_2$) -- distillation's most robust, reproducible effect, independent of whether it improves accuracy. Notably, on IMDb $S_1$ attains \emph{lower} $KL$ than $S_2$ at both temperatures despite far worse accuracy: global $KL$ divergence is not a predictive proxy for classification performance, nor, as shown below, of explanatory or representational alignment.
-
-\begin{table}[h!]
-\centering
-\caption{Average $KL$ divergence to the teacher $P$ at $T=1$ and $T=2$ (IMDb: $N=3000$ balanced subset; AG News: full \textbf{test} set).}
-\small
-\begin{tabular}{|l|l|c|c|c|c|}
-\hline
-Dataset & $T$ & $B$ & $S_{bad}$ & $S_1$ & $S_2$ \\ \hline
-IMDb & $1$ & $2.847$ & $0.104$ & $0.104$ & $0.111$ \\
-IMDb & $2$ & $1.686$ & $0.132$ & $0.127$ & $0.193$ \\
-AG News & $1$ & $2.080$ & $0.630$ & $0.279$ & $0.248$ \\
-AG News & $2$ & $1.784$ & $0.418$ & $0.229$ & $0.247$ \\ \hline
-\end{tabular}
-\label{tab:kl}
-\end{table}
-
 \subsection{Functional Evaluation and Explanation Comparison}\label{sec:functional-eval}
 
-\textbf{LIME} explanations for a representative AG News \textit{Business} example (the dataset's weakest class) show the teacher's attributions concentrated on topically relevant words, while all four students assign high importance to task-irrelevant words -- the same pattern found on the IMDb pilot (teacher highlights genuine sentiment words; students favor function words like \textit{and}/\textit{the}, regardless of classification performance); see the extended version for the corresponding figure.
+\textbf{LIME} explanations for a representative \textbf{AG News} \textit{Business} example show the teacher's top attributions concentrated on topical terms (\textit{pension}, \textit{workers}, \textit{Unions}, \textit{Federal}); students share most of these words, mixing in generic phrase tokens absent from the teacher's list. A similar pattern holds on \textbf{IMDb}, where the teacher and most students concentrate on genuine sentiment words (\textit{extraordinary}, \textit{wonderful}, \textit{dull}, \textit{clichéd}), except $S_1$, which consistently favors function words (\textit{it}, \textit{and}, \textit{the}, \textit{to}) over content words regardless of its classification performance.
 
-Table~\ref{tab:lime_agg} reports aggregate \textbf{LIME} agreement (vs.\ teacher) and faithfulness on both datasets, $N=100$, $k=10$. On both, $S_2$ is consistently the best-aligned and most-faithful student, though the gap to $B$ is modest.
+\textbf{SHAP} explanations for the same examples are far less concentrated: the top-$10$ words capture only a small fraction of the total attribution, with the remaining $\sim$140 tokens accounting for most of it, and content/function words appear interspersed across all five models rather than following a clean teacher/student split. \textbf{Integrated Gradients}, for every model including the teacher, is instead dominated by one or two extreme-magnitude spikes on semantically arbitrary tokens (proper nouns, subword fragments) rather than topical or sentiment content.
 
-\begin{table}[h!]
-\centering
-\caption{\textbf{LIME} Jaccard@10, Spearman $\rho$, and Faithfulness@10 vs.\ teacher, both datasets ($N=100$, $k=10$).}
-\footnotesize
-\begin{tabular}{|l|c|c|c|c|c|c|}
-\hline
-& \multicolumn{3}{c|}{IMDb} & \multicolumn{3}{c|}{AG News} \\
-Model & Jac.@10 & $\rho$ & Faithf. & Jac.@10 & $\rho$ & Faithf. \\ \hline
-$P$ & -- & -- & $0.172$ & -- & -- & $0.138$ \\
-$B$ & $0.183$ & $0.248$ & $0.083$ & $0.336$ & $0.321$ & $0.306$ \\
-$S_{bad}$ & $0.170$ & $0.216$ & $0.202$ & $0.348$ & $0.280$ & $0.402$ \\
-$S_1$ & $0.136$ & $0.189$ & $0.177$ & $0.342$ & $0.307$ & $0.299$ \\
-$S_2$ & $0.212$ & $0.299$ & $0.267$ & $0.358$ & $0.343$ & $0.432$ \\ \hline
-\end{tabular}
-\label{tab:lime_agg}
-\end{table}
+Table~\ref{tab:stability} reports \textbf{LIME} stability (mean pairwise Jaccard@10 across $5$ re-runs, $N=20$). The teacher is more stable than the students on \textbf{AG News} but not always on \textbf{IMDb}, so stability alone is not a proxy for explanation quality.
 
-\textbf{SHAP} (Table~\ref{tab:shap_agg}) shows the same $S_2$-best ranking, but faithfulness near zero for \emph{every} model, including the teacher, on both datasets -- possibly a limitation of masking-based perturbation for this architecture rather than a genuine absence of faithful explanations.
+Table~\ref{tab:explanation_metrics} reports aggregate \textbf{LIME} agreement (vs.\ teacher) and faithfulness on both datasets, $N=100$, $k=10$. On both, $S_2$ is consistently the best-aligned and most-faithful student, though the gap to $B$ is modest.
 
-\begin{table}[h!]
-\centering
-\caption{\textbf{SHAP} Jaccard@10, Spearman $\rho$, and Faithfulness@10 vs.\ teacher, both datasets ($N=100$, $k=10$).}
-\footnotesize
-\begin{tabular}{|l|c|c|c|c|c|c|}
-\hline
-& \multicolumn{3}{c|}{IMDb} & \multicolumn{3}{c|}{AG News} \\
-Model & Jac.@10 & $\rho$ & Faithf. & Jac.@10 & $\rho$ & Faithf. \\ \hline
-$P$ & -- & -- & $0.118$ & -- & -- & $0.003$ \\
-$B$ & $0.117$ & $0.239$ & $0.025$ & $0.315$ & $0.270$ & $-0.003$ \\
-$S_{bad}$ & $0.123$ & $0.238$ & $0.093$ & $0.317$ & $0.275$ & $0.000$ \\
-$S_1$ & $0.096$ & $0.245$ & $0.058$ & $0.320$ & $0.267$ & $0.000$ \\
-$S_2$ & $0.176$ & $0.333$ & $0.120$ & $0.311$ & $0.262$ & $-0.001$ \\ \hline
-\end{tabular}
-\label{tab:shap_agg}
-\end{table}
+\textbf{SHAP} (Table~\ref{tab:explanation_metrics}) shows the same $S_2$-best ranking, but faithfulness near zero for \emph{every} model, including the teacher -- likely a limitation of masking-based perturbation rather than a genuine absence of faithful explanations.
 
-\textbf{Integrated Gradients} (Table~\ref{tab:ig_agg}) shows high top-$10$ token overlap ($\approx0.78$--$0.89$ across all models and both datasets) alongside near-zero or negative rank correlations, indicating agreement on \emph{which} tokens matter without agreement on their relative importance -- unlike LIME/SHAP, no student is consistently best-aligned. Sign agreement@$10$ (not tabulated for space) mirrors this split: for LIME/SHAP it follows the same $S_2$-best pattern, ranging $0.72$--$0.82$ across models and datasets, whereas for IG it sits at chance level ($0.50$--$0.54$) for every model -- IG's high token-overlap is therefore not accompanied by agreement on \emph{either} relative importance or polarity, reinforcing that its apparent cross-model consistency is comparatively shallow.
+\textbf{Integrated Gradients} (Table~\ref{tab:explanation_metrics}) shows high top-$10$ token overlap ($\approx0.78$--$0.89$) alongside near-zero or negative rank correlations, indicating agreement on \emph{which} tokens matter without agreement on their relative importance. Sign agreement@$10$ (not tabulated) mirrors this split: \textbf{LIME}/\textbf{SHAP} follow the same $S_2$-best pattern ($0.72$--$0.82$), whereas IG sits at chance level ($0.50$--$0.54$) for every model, so its cross-model consistency is comparatively shallow.
 
-\begin{table}[h!]
-\centering
-\caption{\textbf{Integrated Gradients} (zero baseline) Jaccard@10, Spearman $\rho$, and Faithfulness@10 vs.\ teacher, both datasets ($N=100$, $k=10$).}
-\footnotesize
-\begin{tabular}{|l|c|c|c|c|c|c|}
-\hline
-& \multicolumn{3}{c|}{IMDb} & \multicolumn{3}{c|}{AG News} \\
-Model & Jac.@10 & $\rho$ & Faithf. & Jac.@10 & $\rho$ & Faithf. \\ \hline
-$P$ & -- & -- & $0.010$ & -- & -- & $0.054$ \\
-$B$ & $0.793$ & $-0.005$ & $0.010$ & $0.891$ & $0.022$ & $0.067$ \\
-$S_{bad}$ & $0.778$ & $0.028$ & $0.085$ & $0.883$ & $0.040$ & $0.163$ \\
-$S_1$ & $0.814$ & $0.010$ & $0.025$ & $0.876$ & $-0.036$ & $0.138$ \\
-$S_2$ & $0.787$ & $0.039$ & $0.019$ & $0.888$ & $0.013$ & $0.340$ \\ \hline
-\end{tabular}
-\label{tab:ig_agg}
-\end{table}
-
-Table~\ref{tab:stability} reports \textbf{LIME} stability (mean pairwise Jaccard@10 across $5$ re-runs, $N=20$). The teacher is more stable than the students on AG News but not always on IMDb, so stability alone is not a proxy for explanation quality.
-
-\begin{table}[h!]
+\begin{table}[bp]
 \centering
 \caption{\textbf{LIME} stability (mean pairwise Jaccard@10 across $5$ seeds, $N=20$), both datasets.}
 \small
 \begin{tabular}{|l|c|c|c|c|c|}
 \hline
 Dataset & $P$ & $B$ & $S_{bad}$ & $S_1$ & $S_2$ \\ \hline
-IMDb & $0.548$ & $0.587$ & $0.684$ & $0.611$ & $0.710$ \\
-AG News & $0.774$ & $0.669$ & $0.639$ & $0.615$ & $0.688$ \\ \hline
+\textbf{IMDb} & $0.548$ & $0.587$ & $0.684$ & $0.611$ & $0.710$ \\
+\textbf{AG News} & $0.774$ & $0.669$ & $0.639$ & $0.615$ & $0.688$ \\ \hline
 \end{tabular}
 \label{tab:stability}
 \end{table}
 
 \subsection{Representational Comparison}\label{sec:repr-comparison}
 
-Table~\ref{tab:attn} reports the cosine similarity between each student's attention map and the teacher's average attention map ($P_{avg}$, matched layer pairs), at three representative layers per dataset (full per-layer tables are in the extended version). On \textbf{IMDb}, $B$ is consistently \emph{least} similar to the teacher from layer $1$ onward ($0.13$--$0.29$ across all $11$ layers, vs.\ $0.19$--$0.69$ for the three distilled variants), suggesting distillation does confer attention-level alignment beyond depth reduction alone on this task. On \textbf{AG News}, this does \emph{not} replicate: $B$ is comparable to, and at several layers (e.g.\ layer $4$: $B=0.52$ vs.\ $0.29$--$0.35$ for the distilled students) more similar to the teacher than any distilled variant -- the sharpest finding of this work regarding representational transfer.
+Table~\ref{tab:repr_metrics} reports cosine similarity, Frobenius distance, and Jensen--Shannon divergence between each student's attention map and the teacher's average ($P_{avg}$, matched via the $2{:}1$ correspondence), across six layers per dataset (full $11$-layer tables are in the extended version). On \textbf{IMDb}, $B$ is slightly lower than the three distilled variants at most layers by cosine similarity, some evidence for attention alignment with the teacher. In \textbf{AG News}, however, the pattern is reversed: $B$ is comparable to, and at several layers more similar to, the teacher than any distilled variant. Both datasets thus suggest attention-level similarity to the teacher is not a reliable signature of distillation, since the non-distilled baseline is nearly as close, or closer, to the teacher's attention geometry.
 
-\begin{table}[h!]
+\begin{table*}[tb]
 \centering
-\caption{Cosine similarity between each student's attention map and the teacher's $P_{avg}$, at representative layers $i$.}
-\small
-\begin{tabular}{|l|c|c|c|c|c|}
-\hline
-Dataset & $i$ & $B$ & $S_{bad}$ & $S_1$ & $S_2$ \\ \hline
-IMDb & $0$ & $0.933$ & $0.923$ & $0.937$ & $0.923$ \\
-IMDb & $5$ & $0.182$ & $0.194$ & $0.394$ & $0.303$ \\
-IMDb & $10$ & $0.135$ & $0.271$ & $0.234$ & $0.164$ \\
-AG News & $0$ & $0.981$ & $0.965$ & $0.968$ & $0.975$ \\
-AG News & $4$ & $0.518$ & $0.345$ & $0.290$ & $0.345$ \\
-AG News & $10$ & $0.311$ & $0.278$ & $0.226$ & $0.264$ \\ \hline
-\end{tabular}
-\label{tab:attn}
-\end{table}
-
-On both datasets, Frobenius distance and $JS$ divergence are nearly indistinguishable across all four models at every layer (e.g.\ IMDb Frobenius at $i=0$: $1.24$--$1.36$ across all models, rising to $34$--$39$ around $i=2$--$3$, out of a theoretical maximum of $64$), and global (whole-model) comparisons show the same pattern as the layer-wise ones, with $B$ never clearly worse than the distilled students (e.g.\ AG News, rollout vs.\ $P_{avg}$: $B=0.986$, $S_1=0.979$, $S_2=0.975$). At an even finer grain, per-head attention-similarity heatmaps and full hidden-state linear-CKA heatmaps (Section~\ref{sec:metrics}) show $B$ visually indistinguishable from the three distilled students on \emph{both} datasets -- the clearest evidence that hidden-state and per-head geometric similarity to the teacher is largely insensitive to whether a model was distilled at all (see the extended version for the corresponding heatmap figures).
-
-Tables~\ref{tab:pr} and~\ref{tab:er} report the spectral effective-rank measures on IMDb at the same representative layers (AG News shows the same qualitative pattern -- students intermediate between a near-rank-one $P_{avg}$ and a highly dispersed $P_r$ ($ER\approx1650$--$2026$), with no consistent ordering by distillation strength -- but is omitted here for space). $P_{avg}$ stays close to rank-one throughout ($PR\approx1$ beyond $i=0$), while $P_r$ is far more dispersed; all four students sit in between, with effective ranks generally growing toward deeper layers and no model consistently highest or lowest -- e.g.\ $B$ has the lowest $ER$ at $i=0$ ($60.2$) but is mid-pack by $i=10$. As with cosine similarity, spectral complexity is therefore not obviously ordered by distillation strength either.
-
-\begin{table}[h!]
-\centering
-\caption{Participation Ratio ($PR$) on IMDb, at representative layers $i$.}
+\caption{\textbf{LIME}, \textbf{SHAP}, and \textbf{Integrated Gradients} (IG, zero baseline) Jaccard@10, Spearman $\rho$, and Faithfulness@10 vs.\ teacher, both datasets ($N=100$, $k=10$).}
 \footnotesize
-\begin{tabular}{|c|c|c|c|c|c|c|}
+\begin{tabular}{|l|l|c|c|c|c|c|c|c|c|c|}
 \hline
-$i$ & $B$ & $S_{bad}$ & $S_1$ & $S_2$ & $P_{avg}$ & $P_r$ \\ \hline
-$0$ & $2.6$ & $2.6$ & $2.5$ & $2.7$ & $3.3$ & $399.6$ \\
-$5$ & $5.6$ & $17.2$ & $5.9$ & $7.7$ & $1.0$ & $1.7$ \\
-$10$ & $9.7$ & $8.6$ & $17.0$ & $12.5$ & $1.0$ & $1.9$ \\ \hline
+\multirow{2}{*}{Dataset} & \multirow{2}{*}{Model} & \multicolumn{3}{c|}{LIME} & \multicolumn{3}{c|}{SHAP} & \multicolumn{3}{c|}{IG} \\
+\cline{3-11}
+ & & Jac.@10 & $\rho$ & Faithf. & Jac.@10 & $\rho$ & Faithf. & Jac.@10 & $\rho$ & Faithf. \\ \hline
+\textbf{IMDb} & $P$ & -- & -- & $0.172$ & -- & -- & $0.118$ & -- & -- & $0.010$ \\
+\textbf{IMDb} & $B$ & $0.183$ & $0.248$ & $0.083$ & $0.117$ & $0.239$ & $0.025$ & $0.793$ & $-0.005$ & $0.010$ \\
+\textbf{IMDb} & $S_{bad}$ & $0.170$ & $0.216$ & $0.202$ & $0.123$ & $0.238$ & $0.093$ & $0.778$ & $0.028$ & $0.085$ \\
+\textbf{IMDb} & $S_1$ & $0.136$ & $0.189$ & $0.177$ & $0.096$ & $0.245$ & $0.058$ & $0.814$ & $0.010$ & $0.025$ \\
+\textbf{IMDb} & $S_2$ & $0.212$ & $0.299$ & $0.267$ & $0.176$ & $0.333$ & $0.120$ & $0.787$ & $0.039$ & $0.019$ \\
+\hline
+\textbf{AG News} & $P$ & -- & -- & $0.138$ & -- & -- & $0.003$ & -- & -- & $0.054$ \\
+\textbf{AG News} & $B$ & $0.336$ & $0.321$ & $0.306$ & $0.315$ & $0.270$ & $-0.003$ & $0.891$ & $0.022$ & $0.067$ \\
+\textbf{AG News} & $S_{bad}$ & $0.348$ & $0.280$ & $0.402$ & $0.317$ & $0.275$ & $0.000$ & $0.883$ & $0.040$ & $0.163$ \\
+\textbf{AG News} & $S_1$ & $0.342$ & $0.307$ & $0.299$ & $0.320$ & $0.267$ & $0.000$ & $0.876$ & $-0.036$ & $0.138$ \\
+\textbf{AG News} & $S_2$ & $0.358$ & $0.343$ & $0.432$ & $0.311$ & $0.262$ & $-0.001$ & $0.888$ & $0.013$ & $0.340$ \\ \hline
 \end{tabular}
-\label{tab:pr}
-\end{table}
+\label{tab:explanation_metrics}
+\end{table*}
 
-\begin{table}[h!]
+\begin{table*}[tb]
 \centering
-\caption{Entropy-based effective rank ($ER$) on IMDb, at representative layers $i$.}
+\caption{Cosine similarity, Frobenius distance, and Jensen--Shannon divergence between each student's attention map and the teacher's $P_{avg}$, across layers $i$ (Frobenius theoretical maximum $\sqrt{2n}=64$ for $n=2048$).}
 \footnotesize
-\begin{tabular}{|c|c|c|c|c|c|c|}
+\begin{tabular}{|l|c|c|c|c|c|c|c|c|c|c|c|c|c|}
 \hline
-$i$ & $B$ & $S_{bad}$ & $S_1$ & $S_2$ & $P_{avg}$ & $P_r$ \\ \hline
-$0$ & $60$ & $117$ & $96$ & $107$ & $309$ & $2027$ \\
-$5$ & $356$ & $507$ & $470$ & $489$ & $26$ & $1798$ \\
-$10$ & $491$ & $509$ & $551$ & $528$ & $129$ & $1819$ \\ \hline
+\multirow{2}{*}{Dataset} & \multirow{2}{*}{$i$} & \multicolumn{4}{c|}{Cosine} & \multicolumn{4}{c|}{Frobenius} & \multicolumn{4}{c|}{$JS$} \\
+\cline{3-14}
+ & & $B$ & $S_{bad}$ & $S_1$ & $S_2$ & $B$ & $S_{bad}$ & $S_1$ & $S_2$ & $B$ & $S_{bad}$ & $S_1$ & $S_2$ \\ \hline
+\textbf{IMDb} & $0$ & $0.933$ & $0.923$ & $0.937$ & $0.923$ & $1.265$ & $1.356$ & $1.236$ & $1.353$ & $0.011$ & $0.018$ & $0.011$ & $0.019$ \\
+\textbf{IMDb} & $2$ & $0.287$ & $0.417$ & $0.455$ & $0.629$ & $36.284$ & $35.659$ & $35.436$ & $33.949$ & $0.427$ & $0.390$ & $0.378$ & $0.342$ \\
+\textbf{IMDb} & $3$ & $0.228$ & $0.433$ & $0.502$ & $0.687$ & $39.117$ & $38.205$ & $37.842$ & $36.461$ & $0.493$ & $0.438$ & $0.433$ & $0.386$ \\
+\textbf{IMDb} & $4$ & $0.154$ & $0.370$ & $0.419$ & $0.654$ & $26.435$ & $25.500$ & $25.077$ & $22.947$ & $0.378$ & $0.307$ & $0.297$ & $0.255$ \\
+\textbf{IMDb} & $7$ & $0.133$ & $0.260$ & $0.479$ & $0.381$ & $18.040$ & $17.391$ & $16.082$ & $16.808$ & $0.369$ & $0.270$ & $0.236$ & $0.251$ \\
+\textbf{IMDb} & $10$ & $0.135$ & $0.271$ & $0.234$ & $0.164$ & $21.310$ & $20.661$ & $20.850$ & $21.184$ & $0.410$ & $0.303$ & $0.308$ & $0.323$ \\
+\hline
+\textbf{AG News} & $0$ & $0.981$ & $0.965$ & $0.968$ & $0.975$ & $1.080$ & $1.460$ & $1.390$ & $1.220$ & $0.005$ & $0.007$ & $0.006$ & $0.006$ \\
+\textbf{AG News} & $2$ & $0.425$ & $0.318$ & $0.231$ & $0.367$ & $39.220$ & $40.160$ & $40.640$ & $39.640$ & $0.450$ & $0.479$ & $0.503$ & $0.468$ \\
+\textbf{AG News} & $3$ & $0.435$ & $0.388$ & $0.222$ & $0.228$ & $37.780$ & $38.510$ & $39.480$ & $39.450$ & $0.416$ & $0.431$ & $0.474$ & $0.466$ \\
+\textbf{AG News} & $4$ & $0.518$ & $0.345$ & $0.290$ & $0.345$ & $21.420$ & $22.960$ & $23.260$ & $22.910$ & $0.250$ & $0.230$ & $0.226$ & $0.221$ \\
+\textbf{AG News} & $7$ & $0.272$ & $0.343$ & $0.333$ & $0.278$ & $18.050$ & $17.520$ & $17.570$ & $17.910$ & $0.312$ & $0.229$ & $0.221$ & $0.249$ \\
+\textbf{AG News} & $10$ & $0.311$ & $0.278$ & $0.226$ & $0.264$ & $19.330$ & $19.520$ & $19.820$ & $19.620$ & $0.300$ & $0.237$ & $0.260$ & $0.253$ \\ \hline
 \end{tabular}
-\label{tab:er}
-\end{table}
+\label{tab:repr_metrics}
+\end{table*}
+
+By contrast, Frobenius distance and $JS$ divergence (Table~\ref{tab:repr_metrics}) are nearly indistinguishable across all four models at every layer on both datasets, following the same profile: near-perfect alignment at $i=0$, peaking at $i=2$--$3$ (Frobenius $34$--$41$ out of a theoretical maximum of $64$; $JS$ $0.34$--$0.50$), then stabilizing by $i=4$--$10$. At an even finer grain, per-head attention-similarity analysis shows $B$ numerically indistinguishable from the three distilled students on \emph{both} datasets -- the clearest evidence that per-head similarity to the teacher is insensitive to whether a model was distilled.
+
+Table~\ref{tab:spectral} reports Participation Ratio ($PR$) and entropy-based effective rank ($ER$) on both datasets, at the same layers as Table~\ref{tab:repr_metrics}. On both measures, $P_{avg}$ stays close to rank-one throughout, while the four students show no consistent ranking: on \textbf{AG News}, $B$ trends from lowest to highest as depth increases on both $PR$ and $ER$; on \textbf{IMDb}, the relative order among $B$, $S_{bad}$, $S_1$, and $S_2$ instead shifts from layer to layer. Spectral complexity is therefore not obviously ordered by distillation strength on either dataset.
 
 \subsection{Discussion}\label{sec:discussion}
 
-Taken together, Sections~\ref{sec:test-eval}--\ref{sec:repr-comparison} suggest a practical reframing of the question motivating the baseline models introduced in this revision. If the only goal is task accuracy under a fixed, reduced architecture, training from scratch with cross-entropy alone ($B$) is a strong, cheaper baseline that can match or beat distillation depending on the task -- AG News being the clearest counter-example to the intuition that distillation should always help. Distillation remains preferable when the goal is matching the teacher's \emph{output distribution} (e.g.\ soft-label pipelines, calibration transfer, ensembling), where its advantage over $B$ is large and consistent (Table~\ref{tab:kl}), and it offers a modest but consistent edge in \textbf{LIME}/\textbf{SHAP} alignment even where it does not help accuracy.
+Taken together, these results indicate that, at least in the studied settings, standard KD does not directly induce alignment of either explanatory mechanisms or internal representations between teacher and student. Both properties instead appear to emerge from the shared dataset and task rather than from the distillation term itself. Distillation's only clearly attributable effect is distributional: it reliably pulls the student's output distribution toward the teacher's (Table~\ref{tab:perf}). Accuracy itself is barely affected by distillation, and inconsistently so across datasets -- but these remain well-behaved, competitive classifiers, worth studying on those terms alone.
 
-More broadly, our results caution against treating distributional or representational similarity to the teacher as a proxy for task performance: on IMDb, $S_1$ attains \emph{lower} $KL$ than $S_2$ while performing far worse (Tables~\ref{tab:perf}--\ref{tab:kl}); on AG News, $B$ attains the highest accuracy while showing no advantage -- and at several layers a disadvantage -- in attention-level similarity to the teacher (Table~\ref{tab:attn}). Neither similarity reliably tracks performance here, echoing the point raised for explanations in Section~\ref{sec:functional-eval}: $S_2$ is the best-performing student on IMDb and the best-aligned on \textbf{LIME}/\textbf{SHAP}, yet trails $S_1$ in $KL$ fidelity.
+This dissociation is not incidental: if explanatory or representational alignment were induced by the distillation term itself, both should track distillation strength (i.e.\ $KL$ fidelity) directly. On \textbf{IMDb}, $S_1$ attains \emph{lower} $KL$ than $S_2$ (Table~\ref{tab:perf}) yet is markedly less \textbf{LIME}/\textbf{SHAP}-aligned with the teacher, the opposite of what a distillation-driven account would predict; \textbf{Integrated Gradients} shows no consistent best-aligned student at all, despite the same spread in $KL$ fidelity. On \textbf{AG News}, $B$ shows no disadvantage, and at several layers an advantage, in attention-level similarity to the teacher (Table~\ref{tab:repr_metrics}), despite having the highest accuracy of all five models. Neither similarity scales with distillation strength, reinforcing that the shared task and data are the more likely source of teacher-student similarity.
 
 \subsection{Does Distillation Add Value Beyond Depth Reduction?}\label{sec:distillation-value}
 
-Table~\ref{tab:verdict} summarizes the picture across both datasets. Distillation's only robust, task-independent effect is pulling the student's output distribution toward the teacher's; its effects on accuracy, explanatory alignment, and fine-grained representational similarity are comparatively small, inconsistent across datasets, and, for attention/hidden-state geometry, largely absent once a non-distilled baseline is available for comparison.
+Table~\ref{tab:verdict} summarizes the picture across both datasets. Distillation's only robust, task-independent effect is pulling the student's output distribution toward the teacher's. Its effects on accuracy, explanatory alignment, and fine-grained representational similarity are comparatively small, inconsistent across datasets, and, for attention geometry, largely absent once a non-distilled baseline is available for comparison.
 
-\begin{table}[h!]
+\begin{table*}[tb]
+\centering
+\caption{Participation Ratio ($PR$) and entropy-based effective rank ($ER$), at layers $i$, both datasets.}
+\footnotesize
+\begin{tabular}{|l|c|c|c|c|c|c|c|c|c|c|c|}
+\hline
+\multirow{2}{*}{Dataset} & \multirow{2}{*}{$i$} & \multicolumn{5}{c|}{$PR$} & \multicolumn{5}{c|}{$ER$} \\
+\cline{3-12}
+ & & $B$ & $S_{bad}$ & $S_1$ & $S_2$ & $P_{avg}$ & $B$ & $S_{bad}$ & $S_1$ & $S_2$ & $P_{avg}$ \\ \hline
+\textbf{IMDb} & $0$ & $2.6$ & $2.6$ & $2.5$ & $2.7$ & $3.3$ & $60$ & $117$ & $96$ & $107$ & $309$ \\
+\textbf{IMDb} & $2$ & $3.4$ & $3.0$ & $2.5$ & $1.7$ & $1.0$ & $278$ & $298$ & $230$ & $180$ & $5$ \\
+\textbf{IMDb} & $3$ & $2.9$ & $3.3$ & $2.5$ & $2.0$ & $1.0$ & $328$ & $398$ & $304$ & $361$ & $7$ \\
+\textbf{IMDb} & $4$ & $5.0$ & $4.4$ & $4.3$ & $2.4$ & $1.0$ & $315$ & $437$ & $517$ & $485$ & $20$ \\
+\textbf{IMDb} & $7$ & $13.7$ & $13.4$ & $7.5$ & $7.1$ & $1.0$ & $505$ & $555$ & $505$ & $488$ & $84$ \\
+\textbf{IMDb} & $10$ & $9.7$ & $8.6$ & $17.0$ & $12.5$ & $1.0$ & $491$ & $509$ & $551$ & $528$ & $129$ \\
+\hline
+\textbf{AG News} & $0$ & $1.3$ & $1.3$ & $1.4$ & $1.4$ & $1.4$ & $13$ & $14$ & $16$ & $18$ & $24$ \\
+\textbf{AG News} & $2$ & $1.6$ & $1.4$ & $1.7$ & $2.0$ & $1.0$ & $29$ & $14$ & $31$ & $39$ & $1$ \\
+\textbf{AG News} & $3$ & $1.9$ & $1.4$ & $1.9$ & $2.1$ & $1.0$ & $40$ & $19$ & $32$ & $51$ & $2$ \\
+\textbf{AG News} & $4$ & $1.9$ & $1.4$ & $1.8$ & $1.9$ & $1.0$ & $42$ & $20$ & $47$ & $55$ & $3$ \\
+\textbf{AG News} & $7$ & $3.4$ & $1.5$ & $1.8$ & $1.6$ & $1.0$ & $62$ & $32$ & $47$ & $47$ & $5$ \\
+\textbf{AG News} & $10$ & $3.3$ & $1.6$ & $1.7$ & $1.8$ & $1.0$ & $66$ & $28$ & $40$ & $43$ & $6$ \\ \hline
+\end{tabular}
+\label{tab:spectral}
+\end{table*}
+
+\begin{table}[tb]
 \centering
 \caption{Does distillation help beyond training a smaller model?}
-\small
-\begin{tabular}{|l|l|l|}
+\footnotesize
+\begin{tabular}{|>{\raggedright\arraybackslash}p{2.3cm}|>{\raggedright\arraybackslash}p{2.3cm}|>{\raggedright\arraybackslash}p{2.8cm}|}
 \hline
-Property & IMDb & AG News \\ \hline
-Accuracy & Helps ($S_2\gg B$) & Hurts ($B>$ all) \\
+Property & \textbf{IMDb} & \textbf{AG News} \\ \hline
+Accuracy & Mixed ($S_2$ only) & Hurts ($B>$ all) \\
 $KL$ fidelity & Robustly helps & Robustly helps \\
 Explanation align. & Modest ($S_2$ best) & Modest ($S_2$ best) \\
-Represent. align. & Partial ($B$ worst) & Absent ($B$ competitive) \\ \hline
+Represent. align. & Weak ($B\approx$ others) & Absent ($B$ competitive) \\ \hline
 \end{tabular}
 \label{tab:verdict}
 \end{table}
 
 \subsection{Limitations}\label{sec:limitations}
 
-This study covers only two English text-classification datasets of modest label cardinality (binary IMDb, four-class AG News); whether the task-dependence between them (Table~\ref{tab:verdict}) generalizes to other modalities or higher-cardinality tasks is untested. The $(\alpha,\beta)$ grid is narrow: only two points beyond $S_1$/$S_2$ were tested ($\alpha=1$ for $B$, $\alpha=0.9$ for $S_{bad}$), and the opposite extreme -- pure distillation with no cross-entropy term ($\alpha=0$) -- was never tested (Section~\ref{sec:distillation-value}). The near-zero \textbf{SHAP} faithfulness and \textbf{IG} high-overlap/low-rank-correlation pattern, observed for every model including the teacher, may partly reflect limitations of these methods rather than of distillation. Underlying all of this is a hardware constraint: every experiment ran on a single consumer GPU (RTX 5070 Ti, $16$GB), bounding how many datasets, scales, and teacher/student architectures could be explored in reasonable time -- likely a more binding constraint than the use of a single teacher architecture (TinyLlama-1.1B) throughout.
+This study covers only two English text-classification datasets of modest label cardinality; whether the task-dependence between them (Table~\ref{tab:verdict}) generalizes to other modalities or higher-cardinality tasks is untested. The $(\alpha,\beta)$ grid is narrow: only two points beyond $S_1$/$S_2$ were tested ($\alpha=1$ for $B$, $\alpha=0.9$ for $S_{bad}$), and the opposite extreme (pure distillation, $\alpha=0$) was never tested. Underlying all of this is a hardware constraint: every experiment ran on a single consumer GPU (RTX 5070 Ti, $16$GB), bounding how many datasets, scales, and architectures could be explored.
 
 \section{Conclusions}
 
-This work investigated whether functional similarity induced by knowledge distillation extends to internal representations and explanatory mechanisms, using a family of models -- a non-distilled baseline, a weakly-distilled variant, and two distilled students -- on an IMDb pilot and, as the main study, on AG News. In these specific, comparatively simple settings, the answer is negative rather than definitively so: every student, including the non-distilled baseline, assigns importance to irrelevant tokens regardless of accuracy, and $B$ is indistinguishable from the distilled students at the level of individual attention heads and hidden-state geometry on both datasets, and even at the level of full attention maps, distillation helps only on IMDb. The one property that behaves consistently, independently of accuracy, is distributional ($KL$) fidelity to the teacher.
+This work investigated whether functional similarity induced by knowledge distillation extends to internal representations and explanatory mechanisms, using a family of models independently on two tasks: binary \textbf{IMDb} sentiment classification and four-class \textbf{AG News} topic classification. In these comparatively simple settings, the answer is negative rather than definitively so: every student, including the baseline, assigns importance to irrelevant tokens regardless of accuracy, and $B$ is indistinguishable from the distilled students at the level of individual attention heads on both datasets; even at the level of full attention maps, distillation offers at best weak, inconsistent evidence of an effect on \textbf{IMDb} and none on \textbf{AG News}. The one property that behaves consistently, independently of accuracy, is distributional ($KL$) fidelity to the teacher.
 
-A striking pattern underlies this: $B$, $S_{bad}$, $S_1$, and $S_2$ converge toward similar attention and hidden-state structure despite spanning $\alpha$ from $0.5$ to $1$. Since all four are trained from scratch on the same architecture and dataset, and the one term every one of them shares is cross-entropy, this convergence is at least as consistent with the task and dataset imprinting this structure as with a distillation-specific effect; our design cannot distinguish the two, since it never removes cross-entropy from the loss entirely. A natural next step, left to future work, is a student trained with \emph{pure} distillation ($\alpha=0$, no cross-entropy term): if its representations diverge from the $B$/$S_{bad}$/$S_1$/$S_2$ cluster, that would implicate cross-entropy, rather than the dataset alone, as the source of this convergence.
+A striking pattern underlies this: $B$, $S_{bad}$, $S_1$, and $S_2$ converge toward similar attention structure despite spanning $\alpha$ from $0.5$ to $1$. All four share the same architecture, dataset, and cross-entropy training, with only $S_{bad}$, $S_1$, and $S_2$ receiving a distillation term. Since $B$ still converges to the same structure as the distilled students, that convergence cannot be attributed to distillation alone. A natural next step, left for future work, is a student trained with \emph{pure} distillation ($\alpha=0$, no cross-entropy term): if its representations diverge from the $B$/$S_{bad}$/$S_1$/$S_2$ cluster, that would implicate cross-entropy over the dataset, rather than distillation, as the source of this convergence.
+
+\section*{Acknowledgment}
+
+The writing of this manuscript was partially assisted by generative language models used exclusively for stylistic revision and textual reformulation tasks: Claude Sonnet 4.6 \cite{anthropic2025claude} (Anthropic).
 
 \bibliographystyle{plain}
 \bibliography{references}
