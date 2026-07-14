@@ -20,7 +20,7 @@
 \usepackage{multirow}
 \usepackage{placeins}
 
-\title{Does Functional Similarity Induced by Distillation Preserve Internal Representations and Explanatory Mechanisms in Autoregressive Models?\thanks{This research was funded by the Agencia Nacional de Investigaci\'on e Innovaci\'on (ANII), Uruguay, under code POS\_NAC\_2025\_4\_189264.}}
+\title{Does Functional Similarity Induced by Distillation Preserve Internal Representations and Explanatory Mechanisms?\thanks{This research was funded by the Agencia Nacional de Investigaci\'on e Innovaci\'on (ANII), Uruguay, grant number POS\_NAC\_2025\_4\_189264.}}
 
 \author{\IEEEauthorblockN{1\textsuperscript{st} Martin Luca Perciante}
 \IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
@@ -46,7 +46,7 @@ email address or ORCID}
 \maketitle
 
 \begin{abstract}
-Knowledge distillation \cite{hinton2015distilling} is often evaluated in terms of functional similarity between teacher and student models, typically measured through predictive performance. However, it remains unclear whether this functional similarity also implies the preservation of internal representations and explanatory mechanisms without explicitly imposing them. This work investigates this question in autoregressive Transformers. A \textbf{TinyLlama} \cite{zhang2024tinyllama} teacher is distilled into a family of 11 attention layer students with different training configurations. Internal representations are compared through layer-wise attention-map metrics (cosine similarity, Frobenius distance, Jensen--Shannon divergence \cite{lin1991divergence}, spectral effective rank \cite{recanatesi2022scale, roy2007effective}), per-head similarity, while explanatory mechanisms are evaluated through \textbf{LIME} \cite{ribeiro2016should}, \textbf{SHAP} \cite{lundberg2017unified}, and \textbf{Integrated Gradients} \cite{sundararajan2017axiomatic} (zero-vector baseline), moving beyond qualitative examples to aggregate agreement (Jaccard overlap, rank correlation, sign agreement) and deletion-based faithfulness metrics \cite{deyoung2020eraser}. The study is conducted on binary \textbf{IMDb} \cite{maas-EtAl:2011:ACL-HLT2011} sentiment classification and on four-class \textbf{AG News} \cite{zhang2015character} topic classification. Results show that distillation does not transfer the teacher's explanatory mechanisms on either dataset, even though it robustly and monotonically improves the student's distributional fidelity to the teacher on both datasets. Representational similarity, in turn, is only partially and inconsistently attributable to distillation: attention-level and per-head metrics show that a non-distilled baseline is as close to the teacher as the distilled students. These findings suggest that the observed similarity to the teacher is driven more by the shared data and task than by distillation itself, indicating that functional similarity does not, by itself, guarantee the preservation of a teacher's explanatory mechanisms or internal representations.
+Knowledge distillation is often evaluated in terms of functional similarity between teacher and student models, measured through predictive performance. However, it remains unclear whether this functional similarity also implies the preservation of internal representations and explanatory mechanisms without explicitly imposing them. This work investigates this question in autoregressive Transformers. A \textbf{TinyLlama} \cite{zhang2024tinyllama} teacher is distilled into a family of 11 attention layer students with different training configurations. Internal representations are compared through layer-wise attention-map metrics, per-head similarity, while explanatory mechanisms are evaluated through \textbf{LIME}, \textbf{SHAP}, and \textbf{Integrated Gradients}, moving beyond qualitative examples to aggregate agreement and deletion-based faithfulness metrics. The study is conducted on binary \textbf{IMDb} sentiment classification and on four-class \textbf{AG News} topic classification. Results show that distillation does not transfer the teacher's explanatory mechanisms on either dataset. Representational similarity, in turn, is only partially and inconsistently attributable to distillation: attention-level and per-head metrics show that a non-distilled baseline is as close to the teacher as the distilled students. These findings suggest that the observed similarity to the teacher is driven more by the shared data and task than by distillation itself, indicating that functional similarity does not, by itself, guarantee the preservation of a teacher's explanatory mechanisms or internal representations.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -55,11 +55,9 @@ Distillation, Attention, XAI, Explainability
 
 \section{Introduction}
 
-Explainable Artificial Intelligence (XAI) seeks to interpret and explain the behavior of complex models, essential in domains where deployed systems must justify autonomous decisions and foster user trust. This task is particularly difficult for Large Language Models (LLMs), where probabilistic text generation replaces classification with a single class label output.
+Explainable Artificial Intelligence (XAI) seeks to interpret and explain the behavior of complex models, essential in domains where deployed systems must justify autonomous decisions and foster user trust. This task is particularly difficult for Large Language Models (LLMs), where probabilistic text generation replaces classification with a single class label output. Transformer-based models are the architecture of choice for this kind of modeling in current Natural Language Processing (NLP), driving recent progress largely by growing in parameters and complexity; the resulting computational cost has motivated compression techniques such as knowledge distillation (KD), in which a smaller model (student) is trained to approximate the output distribution of a larger model (teacher) \cite{hinton2015distilling}, alongside dataset training.
 
-Autoregressive Transformer-based models are the architecture of choice for this kind of modeling in current Natural Language Processing (NLP), driving recent progress largely by growing in parameters and complexity; the resulting computational cost has motivated compression techniques such as knowledge distillation (KD), in which a smaller model (student) is trained to approximate the output distribution of a larger model (teacher) \cite{hinton2015distilling}, alongside dataset training.
-
-Standard KD is centered on functional similarity: the same input is made to produce a similar output, regardless of the internal computations that produce it. Prior work has shown that different attention configurations can induce similar functional behavior \cite{jain2019attention}, raising the question of whether KD enforces a preference for the teacher's internal representations, or whether it can converge to different attention maps while reproducing the teacher's output distribution. Bringing XAI into this picture, different models can provide different explanations for the same example while achieving similar performance over a dataset, so this question extends naturally to explanatory mechanisms as well.
+Standard KD is centered on functional similarity: the same input is made to produce a similar output, regardless of the internal representation that produce it. Prior work has shown that different attention configurations can induce similar functional behavior \cite{jain2019attention}, raising the question of whether KD enforces a preference for the teacher's internal representations, or whether it can converge to different attention maps while reproducing the teacher's output distribution. Bringing XAI into this picture, different models can provide different explanations for the same example while achieving similar performance over a dataset.
 
 This work investigates whether the functional similarity induced by logit-based KD extends to similarity in internal representations and explanatory mechanisms. We adopt a generative classification setting, in which target classes correspond to single vocabulary tokens, allowing internal representations to be compared directly between teacher and student. We conducted the experiments on binary \textbf{IMDb} sentiment classification and in \textbf{AG News} four-class topic classification.
 
@@ -86,7 +84,7 @@ The teacher is \textbf{TinyLlama-1.1B-Chat-v1.0} \cite{zhang2024tinyllama}, a $2
 
 The studied problem is reformulated as a generative classification \cite{schick2021exploiting}, where class-labels are single vocabulary tokens. Dataset inputs are inserted into a fixed prompt template, and only the class-token logits are compared at inference. For \textbf{IMDb} \cite{maas-EtAl:2011:ACL-HLT2011} ($50000$ reviews, labels \textit{positive}/\textit{negative}), the template is \texttt{"Review: \{input\} Summary:"}; filtered to the teacher's $2048$-token context, splits are $22492$/$2500$/$24995$ (train/val/test). For \textbf{AG News} \cite{zhang2015character} ($4$ classes: \textit{World}, \textit{Sports}, \textit{Business}, \textit{Sci/Tech}), the template is \texttt{"Article: \{input\} Theme:"}. Since \textit{Sci/Tech} tokenizes to four sub-tokens, it is relabeled \textit{Science} (one token) purely to preserve the single-token framing. Splits are $30000$/$100$/$7600$ (balanced). All other hyperparameters are shared across datasets.
 
-The teacher is fully fine-tuned per dataset for one epoch (lr $2\times10^{-5}$, batch size $1$, AdamW, early stopping after $5$ non-improving validation rounds). Every student is randomly initialized and trained for $3$ epochs (lr $1\times10^{-4}$, no early stopping), minimizing \eqref{eq:loss}.
+The teacher is fully fine-tuned per dataset for one epoch (learning rate $2\times10^{-5}$, batch size $1$, AdamW, early stopping after $5$ non-improving validation rounds). Every student is randomly initialized and trained for $3$ epochs (learning rate $1\times10^{-4}$, no early stopping), minimizing \eqref{eq:loss}.
 
 \begin{align}
 \mathcal{L} &= \alpha\,\mathcal{L}_{CE} + (1-\alpha)\,T^2 D_{KL}\left(P_P \Vert P_S\right) \notag \\
@@ -105,7 +103,7 @@ with $T=2$ fixed, $P_P^{(c)},P_S^{(c)}$ the probability distributions restricted
 Model & Init. & $\alpha$ & $\beta$ & Description \\ \hline
 $P$ (teacher) & pretrained & -- & -- & fine-tuned, CE only \\
 $B$ & random & $1$ & $0$ & no distillation \\
-$S_{bad}$ & random & $0.9$ & $0$ & weak global $KD$ \\
+$S_0$ & random & $0.9$ & $0$ & weak global $KD$ \\
 $S_1$ & random & $0.5$ & $0$ & standard global $KD$ \\
 $S_2$ & random & $0.5$ & $0.25$ & $+$ class-restricted $KD$ \\ \hline
 \end{tabular}
@@ -120,27 +118,27 @@ We compare Attention maps with complementary geometric, probabilistic, and spect
 
 For evaluating explainability methods, we compute aggregate metrics over held-out samples, comparing each student's word-level attribution against the teacher's for every method. Metrics include top-$k$ \textit{Jaccard overlap} ($k=10$), \textit{Spearman correlation} of signed scores over the common attributed vocabulary, and deletion-based \textit{faithfulness@$k$} \cite{deyoung2020eraser}, the drop in true-class probability after masking the top-$k$ words (computed per model, including the teacher, as reference). Given \textbf{LIME's} stochastic nature, we also measure \textit{stability} as the Jaccard@10 mean across $5$ re-runs with different seeds.
 
-\subsection{Evaluation on the \textbf{Test} Set}\label{sec:test-eval}
+\subsection{Evaluation on the Test Set}\label{sec:test-eval}
 
-Table~\ref{tab:perf} reports classification performance and average $KL$ divergence to the teacher ($T=1,2$) for all models on both datasets. On \textbf{IMDb}, distillation's effect on accuracy is mixed: only the class-restricted $S_2$ edges out the non-distilled $B$ ($0.867$ vs.\ $0.858$), while $S_{bad}$ and $S_1$ both \emph{underperform} $B$ ($0.813$ and $0.798$), i.e.\ the distillation term hurts relative to training from scratch. On \textbf{AG News}, this pattern is more pronounced: $B$ achieves the \emph{highest} accuracy of all five models ($B>S_{bad}>S_2>S_1>P$). $KL$ fidelity, by contrast, follows the same monotonic pattern on \emph{both} datasets and temperatures: $B$ is by far the least faithful, improving with distillation strength ($B>S_{bad}>S_1\gtrsim S_2$). Notably, on \textbf{IMDb} $S_1$ attains \emph{lower} $KL$ than $S_2$ despite worse accuracy: global $KL$ divergence is not a predictive proxy for classification performance, nor, as shown below, of explanatory or representational alignment.
+Table~\ref{tab:perf} reports classification performance and average $KL$ divergence to the teacher ($T=1,2$) for all models on both datasets. On \textbf{IMDb}, distillation's effect on accuracy is mixed: only the class-restricted $S_2$ edges out the non-distilled $B$ ($0.867$ vs.\ $0.858$), while $S_0$ and $S_1$ both \emph{underperform} $B$ ($0.813$ and $0.798$), i.e.\ the distillation term hurts relative to training from scratch. On \textbf{AG News}, this pattern is more pronounced: $B$ achieves the \emph{highest} accuracy of all five models ($B>S_0>S_2>S_1>P$). $KL$ fidelity, by contrast, follows the same monotonic pattern on \emph{both} datasets and temperatures: $B$ is by far the least faithful, improving with distillation strength ($B>S_0>S_1\gtrsim S_2$). Notably, on \textbf{IMDb} $S_1$ attains \emph{lower} $KL$ than $S_2$ despite worse accuracy: global $KL$ divergence is not a predictive proxy for classification performance, nor, as shown below, of explanatory or representational alignment.
 
 \begin{table}[tb]
 \centering
-\caption{Accuracy / F1 (macro-averaged for \textbf{AG News}) on the \textbf{test} set, and average $KL$ divergence to the teacher $P$ at $T=1,2$ (\textbf{IMDb}: $N=3000$ balanced subset; \textbf{AG News}: full \textbf{test} set).}
+\caption{Accuracy / F1 (macro-averaged for \textbf{AG News}) on the test set, and average $KL$ divergence to the teacher $P$ at $T=1,2$ (\textbf{IMDb}: $N=3000$ balanced subset; \textbf{AG News}: full test set).}
 \small
 \begin{tabular}{|l|l|c|c|c|c|c|}
 \hline
 Dataset & Model & Acc. & F1 & $KL_{T=1}$ & $KL_{T=2}$ \\ \hline
-\textbf{IMDb} & $P$ & $0.954$ & $0.954$ & -- & -- \\
-\textbf{IMDb} & $B$ & $0.858$ & $0.857$ & $2.847$ & $1.686$ \\
-\textbf{IMDb} & $S_{bad}$ & $0.813$ & $0.810$ & $0.104$ & $0.132$ \\
-\textbf{IMDb} & $S_1$ & $0.798$ & $0.796$ & $0.104$ & $0.127$ \\
-\textbf{IMDb} & $S_2$ & $0.867$ & $0.867$ & $0.111$ & $0.193$ \\ \hline
-\textbf{AG News} & $P$ & $0.849$ & $0.848$ & -- & -- \\
-\textbf{AG News} & $B$ & $0.886$ & $0.886$ & $2.080$ & $1.784$ \\
-\textbf{AG News} & $S_{bad}$ & $0.883$ & $0.884$ & $0.630$ & $0.418$ \\
-\textbf{AG News} & $S_1$ & $0.878$ & $0.878$ & $0.279$ & $0.229$ \\
-\textbf{AG News} & $S_2$ & $0.880$ & $0.881$ & $0.248$ & $0.247$ \\ \hline
+\textbf{IMDb} & $P$ & $0.95$ & $0.95$ & -- & -- \\
+\textbf{IMDb} & $B$ & $0.86$ & $0.86$ & $2.85$ & $1.69$ \\
+\textbf{IMDb} & $S_0$ & $0.81$ & $0.81$ & $0.10$ & $0.13$ \\
+\textbf{IMDb} & $S_1$ & $0.80$ & $0.80$ & $0.10$ & $0.13$ \\
+\textbf{IMDb} & $S_2$ & $0.87$ & $0.87$ & $0.11$ & $0.19$ \\ \hline
+\textbf{AG News} & $P$ & $0.85$ & $0.85$ & -- & -- \\
+\textbf{AG News} & $B$ & $0.89$ & $0.89$ & $2.08$ & $1.78$ \\
+\textbf{AG News} & $S_0$ & $0.88$ & $0.88$ & $0.63$ & $0.42$ \\
+\textbf{AG News} & $S_1$ & $0.88$ & $0.88$ & $0.28$ & $0.23$ \\
+\textbf{AG News} & $S_2$ & $0.88$ & $0.88$ & $0.25$ & $0.25$ \\ \hline
 \end{tabular}
 \label{tab:perf}
 \end{table}
@@ -165,9 +163,9 @@ Table~\ref{tab:explanation_metrics} reports aggregate \textbf{LIME} agreement (v
 \small
 \begin{tabular}{|l|c|c|c|c|c|}
 \hline
-Dataset & $P$ & $B$ & $S_{bad}$ & $S_1$ & $S_2$ \\ \hline
-\textbf{IMDb} & $0.548$ & $0.587$ & $0.684$ & $0.611$ & $0.710$ \\
-\textbf{AG News} & $0.774$ & $0.669$ & $0.639$ & $0.615$ & $0.688$ \\ \hline
+Dataset & $P$ & $B$ & $S_0$ & $S_1$ & $S_2$ \\ \hline
+\textbf{IMDb} & $0.55$ & $0.59$ & $0.68$ & $0.61$ & $0.71$ \\
+\textbf{AG News} & $0.77$ & $0.67$ & $0.64$ & $0.62$ & $0.69$ \\ \hline
 \end{tabular}
 \label{tab:stability}
 \end{table}
@@ -185,17 +183,17 @@ Table~\ref{tab:repr_metrics} reports cosine similarity, Frobenius distance, and 
 \multirow{2}{*}{Dataset} & \multirow{2}{*}{Model} & \multicolumn{3}{c|}{LIME} & \multicolumn{3}{c|}{SHAP} & \multicolumn{3}{c|}{IG} \\
 \cline{3-11}
  & & Jac.@10 & $\rho$ & Faithf. & Jac.@10 & $\rho$ & Faithf. & Jac.@10 & $\rho$ & Faithf. \\ \hline
-\textbf{IMDb} & $P$ & -- & -- & $0.172$ & -- & -- & $0.118$ & -- & -- & $0.010$ \\
-\textbf{IMDb} & $B$ & $0.183$ & $0.248$ & $0.083$ & $0.117$ & $0.239$ & $0.025$ & $0.793$ & $-0.005$ & $0.010$ \\
-\textbf{IMDb} & $S_{bad}$ & $0.170$ & $0.216$ & $0.202$ & $0.123$ & $0.238$ & $0.093$ & $0.778$ & $0.028$ & $0.085$ \\
-\textbf{IMDb} & $S_1$ & $0.136$ & $0.189$ & $0.177$ & $0.096$ & $0.245$ & $0.058$ & $0.814$ & $0.010$ & $0.025$ \\
-\textbf{IMDb} & $S_2$ & $0.212$ & $0.299$ & $0.267$ & $0.176$ & $0.333$ & $0.120$ & $0.787$ & $0.039$ & $0.019$ \\
+\textbf{IMDb} & $P$ & -- & -- & $0.17$ & -- & -- & $0.12$ & -- & -- & $0.01$ \\
+\textbf{IMDb} & $B$ & $0.18$ & $0.25$ & $0.08$ & $0.12$ & $0.24$ & $0.03$ & $0.79$ & $-0.01$ & $0.01$ \\
+\textbf{IMDb} & $S_0$ & $0.17$ & $0.22$ & $0.20$ & $0.12$ & $0.24$ & $0.09$ & $0.78$ & $0.03$ & $0.09$ \\
+\textbf{IMDb} & $S_1$ & $0.14$ & $0.19$ & $0.18$ & $0.10$ & $0.25$ & $0.06$ & $0.81$ & $0.01$ & $0.03$ \\
+\textbf{IMDb} & $S_2$ & $0.21$ & $0.30$ & $0.27$ & $0.18$ & $0.33$ & $0.12$ & $0.79$ & $0.04$ & $0.02$ \\
 \hline
-\textbf{AG News} & $P$ & -- & -- & $0.138$ & -- & -- & $0.003$ & -- & -- & $0.054$ \\
-\textbf{AG News} & $B$ & $0.336$ & $0.321$ & $0.306$ & $0.315$ & $0.270$ & $-0.003$ & $0.891$ & $0.022$ & $0.067$ \\
-\textbf{AG News} & $S_{bad}$ & $0.348$ & $0.280$ & $0.402$ & $0.317$ & $0.275$ & $0.000$ & $0.883$ & $0.040$ & $0.163$ \\
-\textbf{AG News} & $S_1$ & $0.342$ & $0.307$ & $0.299$ & $0.320$ & $0.267$ & $0.000$ & $0.876$ & $-0.036$ & $0.138$ \\
-\textbf{AG News} & $S_2$ & $0.358$ & $0.343$ & $0.432$ & $0.311$ & $0.262$ & $-0.001$ & $0.888$ & $0.013$ & $0.340$ \\ \hline
+\textbf{AG News} & $P$ & -- & -- & $0.14$ & -- & -- & $0.00$ & -- & -- & $0.05$ \\
+\textbf{AG News} & $B$ & $0.34$ & $0.32$ & $0.31$ & $0.32$ & $0.27$ & $-0.00$ & $0.89$ & $0.02$ & $0.07$ \\
+\textbf{AG News} & $S_0$ & $0.35$ & $0.28$ & $0.40$ & $0.32$ & $0.28$ & $0.00$ & $0.88$ & $0.04$ & $0.16$ \\
+\textbf{AG News} & $S_1$ & $0.34$ & $0.31$ & $0.30$ & $0.32$ & $0.27$ & $0.00$ & $0.88$ & $-0.04$ & $0.14$ \\
+\textbf{AG News} & $S_2$ & $0.34$ & $0.34$ & $0.43$ & $0.31$ & $0.26$ & $-0.00$ & $0.89$ & $0.01$ & $0.34$ \\ \hline
 \end{tabular}
 \label{tab:explanation_metrics}
 \end{table*}
@@ -208,27 +206,27 @@ Table~\ref{tab:repr_metrics} reports cosine similarity, Frobenius distance, and 
 \hline
 \multirow{2}{*}{Dataset} & \multirow{2}{*}{$i$} & \multicolumn{4}{c|}{Cosine} & \multicolumn{4}{c|}{Frobenius} & \multicolumn{4}{c|}{$JS$} \\
 \cline{3-14}
- & & $B$ & $S_{bad}$ & $S_1$ & $S_2$ & $B$ & $S_{bad}$ & $S_1$ & $S_2$ & $B$ & $S_{bad}$ & $S_1$ & $S_2$ \\ \hline
-\textbf{IMDb} & $0$ & $0.933$ & $0.923$ & $0.937$ & $0.923$ & $1.265$ & $1.356$ & $1.236$ & $1.353$ & $0.011$ & $0.018$ & $0.011$ & $0.019$ \\
-\textbf{IMDb} & $2$ & $0.287$ & $0.417$ & $0.455$ & $0.629$ & $36.284$ & $35.659$ & $35.436$ & $33.949$ & $0.427$ & $0.390$ & $0.378$ & $0.342$ \\
-\textbf{IMDb} & $3$ & $0.228$ & $0.433$ & $0.502$ & $0.687$ & $39.117$ & $38.205$ & $37.842$ & $36.461$ & $0.493$ & $0.438$ & $0.433$ & $0.386$ \\
-\textbf{IMDb} & $4$ & $0.154$ & $0.370$ & $0.419$ & $0.654$ & $26.435$ & $25.500$ & $25.077$ & $22.947$ & $0.378$ & $0.307$ & $0.297$ & $0.255$ \\
-\textbf{IMDb} & $7$ & $0.133$ & $0.260$ & $0.479$ & $0.381$ & $18.040$ & $17.391$ & $16.082$ & $16.808$ & $0.369$ & $0.270$ & $0.236$ & $0.251$ \\
-\textbf{IMDb} & $10$ & $0.135$ & $0.271$ & $0.234$ & $0.164$ & $21.310$ & $20.661$ & $20.850$ & $21.184$ & $0.410$ & $0.303$ & $0.308$ & $0.323$ \\
+ & & $B$ & $S_0$ & $S_1$ & $S_2$ & $B$ & $S_0$ & $S_1$ & $S_2$ & $B$ & $S_0$ & $S_1$ & $S_2$ \\ \hline
+\textbf{IMDb} & $0$ & $0.93$ & $0.92$ & $0.94$ & $0.92$ & $1.27$ & $1.36$ & $1.24$ & $1.35$ & $0.01$ & $0.018$ & $0.011$ & $0.02$ \\
+\textbf{IMDb} & $2$ & $0.29$ & $0.42$ & $0.46$ & $0.63$ & $36.28$ & $35.66$ & $35.44$ & $33.95$ & $0.43$ & $0.39$ & $0.38$ & $0.34$ \\
+\textbf{IMDb} & $3$ & $0.23$ & $0.43$ & $0.50$ & $0.69$ & $39.12$ & $38.21$ & $37.84$ & $36.46$ & $0.49$ & $0.44$ & $0.43$ & $0.39$ \\
+\textbf{IMDb} & $4$ & $0.15$ & $0.37$ & $0.42$ & $0.65$ & $26.46$ & $25.50$ & $25.08$ & $22.95$ & $0.38$ & $0.31$ & $0.30$ & $0.26$ \\
+\textbf{IMDb} & $7$ & $0.13$ & $0.26$ & $0.48$ & $0.38$ & $18.04$ & $17.39$ & $16.08$ & $16.81$ & $0.37$ & $0.27$ & $0.24$ & $0.25$ \\
+\textbf{IMDb} & $10$ & $0.14$ & $0.27$ & $0.23$ & $0.16$ & $21.31$ & $20.66$ & $20.85$ & $21.18$ & $0.41$ & $0.30$ & $0.31$ & $0.32$ \\
 \hline
-\textbf{AG News} & $0$ & $0.981$ & $0.965$ & $0.968$ & $0.975$ & $1.080$ & $1.460$ & $1.390$ & $1.220$ & $0.005$ & $0.007$ & $0.006$ & $0.006$ \\
-\textbf{AG News} & $2$ & $0.425$ & $0.318$ & $0.231$ & $0.367$ & $39.220$ & $40.160$ & $40.640$ & $39.640$ & $0.450$ & $0.479$ & $0.503$ & $0.468$ \\
-\textbf{AG News} & $3$ & $0.435$ & $0.388$ & $0.222$ & $0.228$ & $37.780$ & $38.510$ & $39.480$ & $39.450$ & $0.416$ & $0.431$ & $0.474$ & $0.466$ \\
-\textbf{AG News} & $4$ & $0.518$ & $0.345$ & $0.290$ & $0.345$ & $21.420$ & $22.960$ & $23.260$ & $22.910$ & $0.250$ & $0.230$ & $0.226$ & $0.221$ \\
-\textbf{AG News} & $7$ & $0.272$ & $0.343$ & $0.333$ & $0.278$ & $18.050$ & $17.520$ & $17.570$ & $17.910$ & $0.312$ & $0.229$ & $0.221$ & $0.249$ \\
-\textbf{AG News} & $10$ & $0.311$ & $0.278$ & $0.226$ & $0.264$ & $19.330$ & $19.520$ & $19.820$ & $19.620$ & $0.300$ & $0.237$ & $0.260$ & $0.253$ \\ \hline
+\textbf{AG News} & $0$ & $0.98$ & $0.97$ & $0.97$ & $0.98$ & $1.08$ & $1.46$ & $1.39$ & $1.22$ & $0.01$ & $0.01$ & $0.01$ & $0.01$ \\
+\textbf{AG News} & $2$ & $0.43$ & $0.32$ & $0.23$ & $0.37$ & $39.22$ & $40.16$ & $40.64$ & $39.64$ & $0.45$ & $0.48$ & $0.50$ & $0.47$ \\
+\textbf{AG News} & $3$ & $0.44$ & $0.39$ & $0.22$ & $0.23$ & $37.78$ & $38.51$ & $39.48$ & $39.45$ & $0.42$ & $0.43$ & $0.47$ & $0.47$ \\
+\textbf{AG News} & $4$ & $0.52$ & $0.35$ & $0.29$ & $0.35$ & $21.42$ & $22.96$ & $23.26$ & $22.91$ & $0.25$ & $0.23$ & $0.23$ & $0.22$ \\
+\textbf{AG News} & $7$ & $0.27$ & $0.34$ & $0.33$ & $0.28$ & $18.05$ & $17.52$ & $17.57$ & $17.91$ & $0.31$ & $0.23$ & $0.22$ & $0.25$ \\
+\textbf{AG News} & $10$ & $0.31$ & $0.27$ & $0.23$ & $0.26$ & $19.33$ & $19.52$ & $19.82$ & $19.62$ & $0.30$ & $0.24$ & $0.26$ & $0.25$ \\ \hline
 \end{tabular}
 \label{tab:repr_metrics}
 \end{table*}
 
 By contrast, Frobenius distance and $JS$ divergence (Table~\ref{tab:repr_metrics}) are nearly indistinguishable across all four models at every layer on both datasets, following the same profile: near-perfect alignment at $i=0$, peaking at $i=2$--$3$ (Frobenius $34$--$41$ out of a theoretical maximum of $64$; $JS$ $0.34$--$0.50$), then stabilizing by $i=4$--$10$. At an even finer grain, per-head attention-similarity analysis shows $B$ numerically indistinguishable from the three distilled students on \emph{both} datasets -- the clearest evidence that per-head similarity to the teacher is insensitive to whether a model was distilled.
 
-Table~\ref{tab:spectral} reports Participation Ratio ($PR$) and entropy-based effective rank ($ER$) on both datasets, at the same layers as Table~\ref{tab:repr_metrics}. On both measures, $P_{avg}$ stays close to rank-one throughout, while the four students show no consistent ranking: on \textbf{AG News}, $B$ trends from lowest to highest as depth increases on both $PR$ and $ER$; on \textbf{IMDb}, the relative order among $B$, $S_{bad}$, $S_1$, and $S_2$ instead shifts from layer to layer. Spectral complexity is therefore not obviously ordered by distillation strength on either dataset.
+Table~\ref{tab:spectral} reports Participation Ratio ($PR$) and entropy-based effective rank ($ER$) on both datasets, at the same layers as Table~\ref{tab:repr_metrics}. On both measures, $P_{avg}$ stays close to rank-one throughout, while the four students show no consistent ranking: on \textbf{AG News}, $B$ trends from lowest to highest as depth increases on both $PR$ and $ER$; on \textbf{IMDb}, the relative order among $B$, $S_0$, $S_1$, and $S_2$ instead shifts from layer to layer. Spectral complexity is therefore not obviously ordered by distillation strength on either dataset.
 
 \subsection{Discussion}\label{sec:discussion}
 
@@ -238,7 +236,7 @@ This dissociation is not incidental: if explanatory or representational alignmen
 
 \subsection{Does Distillation Add Value Beyond Depth Reduction?}\label{sec:distillation-value}
 
-Table~\ref{tab:verdict} summarizes the picture across both datasets. Distillation's only robust, task-independent effect is pulling the student's output distribution toward the teacher's. Its effects on accuracy, explanatory alignment, and fine-grained representational similarity are comparatively small, inconsistent across datasets, and, for attention geometry, largely absent once a non-distilled baseline is available for comparison.
+Distillation's only robust, task-independent effect is pulling the student's output distribution toward the teacher's. Its effects on accuracy, explanatory alignment, and fine-grained representational similarity are comparatively small, inconsistent across datasets, and, for attention geometry, largely absent once a non-distilled baseline is available for comparison.
 
 \begin{table*}[tb]
 \centering
@@ -248,7 +246,7 @@ Table~\ref{tab:verdict} summarizes the picture across both datasets. Distillatio
 \hline
 \multirow{2}{*}{Dataset} & \multirow{2}{*}{$i$} & \multicolumn{5}{c|}{$PR$} & \multicolumn{5}{c|}{$ER$} \\
 \cline{3-12}
- & & $B$ & $S_{bad}$ & $S_1$ & $S_2$ & $P_{avg}$ & $B$ & $S_{bad}$ & $S_1$ & $S_2$ & $P_{avg}$ \\ \hline
+ & & $B$ & $S_0$ & $S_1$ & $S_2$ & $P_{avg}$ & $B$ & $S_0$ & $S_1$ & $S_2$ & $P_{avg}$ \\ \hline
 \textbf{IMDb} & $0$ & $2.6$ & $2.6$ & $2.5$ & $2.7$ & $3.3$ & $60$ & $117$ & $96$ & $107$ & $309$ \\
 \textbf{IMDb} & $2$ & $3.4$ & $3.0$ & $2.5$ & $1.7$ & $1.0$ & $278$ & $298$ & $230$ & $180$ & $5$ \\
 \textbf{IMDb} & $3$ & $2.9$ & $3.3$ & $2.5$ & $2.0$ & $1.0$ & $328$ & $398$ & $304$ & $361$ & $7$ \\
@@ -266,30 +264,15 @@ Table~\ref{tab:verdict} summarizes the picture across both datasets. Distillatio
 \label{tab:spectral}
 \end{table*}
 
-\begin{table}[tb]
-\centering
-\caption{Does distillation help beyond training a smaller model?}
-\footnotesize
-\begin{tabular}{|>{\raggedright\arraybackslash}p{2.3cm}|>{\raggedright\arraybackslash}p{2.3cm}|>{\raggedright\arraybackslash}p{2.8cm}|}
-\hline
-Property & \textbf{IMDb} & \textbf{AG News} \\ \hline
-Accuracy & Mixed ($S_2$ only) & Hurts ($B>$ all) \\
-$KL$ fidelity & Robustly helps & Robustly helps \\
-Explanation align. & Modest ($S_2$ best) & Modest ($S_2$ best) \\
-Represent. align. & Weak ($B\approx$ others) & Absent ($B$ competitive) \\ \hline
-\end{tabular}
-\label{tab:verdict}
-\end{table}
-
 \subsection{Limitations}\label{sec:limitations}
 
-This study covers only two English text-classification datasets of modest label cardinality; whether the task-dependence between them (Table~\ref{tab:verdict}) generalizes to other modalities or higher-cardinality tasks is untested. The $(\alpha,\beta)$ grid is narrow: only two points beyond $S_1$/$S_2$ were tested ($\alpha=1$ for $B$, $\alpha=0.9$ for $S_{bad}$), and the opposite extreme (pure distillation, $\alpha=0$) was never tested. Underlying all of this is a hardware constraint: every experiment ran on a single consumer GPU (RTX 5070 Ti, $16$GB), bounding how many datasets, scales, and architectures could be explored.
+This study covers only two English text-classification datasets of modest label cardinality; whether the task-dependence between them generalizes to other modalities or higher-cardinality tasks is untested. The $(\alpha,\beta)$ grid is narrow: only two points beyond $S_1$/$S_2$ were tested ($\alpha=1$ for $B$, $\alpha=0.9$ for $S_0$), and the opposite extreme (pure distillation, $\alpha=0$) was never tested. Underlying all of this is a hardware constraint: every experiment ran on a single consumer GPU (RTX 5070 Ti, $16$GB), bounding how many datasets, scales, and architectures could be explored.
 
 \section{Conclusions}
 
 This work investigated whether functional similarity induced by knowledge distillation extends to internal representations and explanatory mechanisms, using a family of models independently on two tasks: binary \textbf{IMDb} sentiment classification and four-class \textbf{AG News} topic classification. In these comparatively simple settings, the answer is negative rather than definitively so: every student, including the baseline, assigns importance to irrelevant tokens regardless of accuracy, and $B$ is indistinguishable from the distilled students at the level of individual attention heads on both datasets; even at the level of full attention maps, distillation offers at best weak, inconsistent evidence of an effect on \textbf{IMDb} and none on \textbf{AG News}. The one property that behaves consistently, independently of accuracy, is distributional ($KL$) fidelity to the teacher.
 
-A striking pattern underlies this: $B$, $S_{bad}$, $S_1$, and $S_2$ converge toward similar attention structure despite spanning $\alpha$ from $0.5$ to $1$. All four share the same architecture, dataset, and cross-entropy training, with only $S_{bad}$, $S_1$, and $S_2$ receiving a distillation term. Since $B$ still converges to the same structure as the distilled students, that convergence cannot be attributed to distillation alone. A natural next step, left for future work, is a student trained with \emph{pure} distillation ($\alpha=0$, no cross-entropy term): if its representations diverge from the $B$/$S_{bad}$/$S_1$/$S_2$ cluster, that would implicate cross-entropy over the dataset, rather than distillation, as the source of this convergence.
+A striking pattern underlies this: $B$, $S_0$, $S_1$, and $S_2$ converge toward similar attention structure despite spanning $\alpha$ from $0.5$ to $1$. All four share the same architecture, dataset, and cross-entropy training, with only $S_0$, $S_1$, and $S_2$ receiving a distillation term. Since $B$ still converges to the same structure as the distilled students, that convergence cannot be attributed to distillation alone. A natural next step, left for future work, is a student trained with \emph{pure} distillation ($\alpha=0$, no cross-entropy term): if its representations diverge from the $B$/$S_0$/$S_1$/$S_2$ cluster, that would implicate cross-entropy over the dataset, rather than distillation, as the source of this convergence.
 
 \section*{Acknowledgment}
 
