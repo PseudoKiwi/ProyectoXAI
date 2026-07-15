@@ -82,9 +82,16 @@ The project used \textbf{Python}, \textbf{PyTorch}, Hugging Face's \textbf{trans
 
 The teacher is \textbf{TinyLlama-1.1B-Chat-v1.0} \cite{zhang2024tinyllama}, a $22$-layer decoder-only Transformer \cite{vaswani2017attention}. Every student shares the teacher's embeddings, attention mechanism, and hidden dimensions, reducing only depth to $11$ randomly-initialized blocks ($2{:}1$ Transformer layer correspondence; compression rate $CR\approx1.79$, $\approx44\%$).
 
+\begin{figure}[bp]
+\centering
+\includesvg[width=\textwidth]{../images/architecture_design.svg}
+\caption{}
+\label{fig:defined_architecture}
+\end{figure}
+
 The studied problem is reformulated as a generative classification \cite{schick2021exploiting}, where class-labels are single vocabulary tokens. Dataset inputs are inserted into a fixed prompt template, and only the class-token logits are compared at inference. For \textbf{IMDb} \cite{maas2011learning} ($50000$ reviews, labels \textit{positive}/\textit{negative}), the template is \texttt{"Review: \{input\} Summary:"}; filtered to the teacher's $2048$-token context, splits are $22492$/$2500$/$24995$ (train/val/test). For \textbf{AG News} \cite{zhang2015character} ($4$ classes: \textit{World}, \textit{Sports}, \textit{Business}, \textit{Sci/Tech}), the template is \texttt{"Article: \{input\} Theme:"}. Since \textit{Sci/Tech} tokenizes to four sub-tokens, it is relabeled \textit{Science} (one token) purely to preserve the single-token framing. Splits are $30000$/$100$/$7600$ (balanced). All other hyperparameters are shared across datasets.
 
-The teacher is fully fine-tuned per dataset for one epoch (learning rate $2\times10^{-5}$, batch size $1$, AdamW, early stopping after $5$ non-improving validation rounds). Every student is randomly initialized and trained for $3$ epochs (learning rate $1\times10^{-4}$, no early stopping), minimizing \eqref{eq:loss}.
+The teacher is fully fine-tuned per dataset for one epoch (learning rate $2\times10^{-5}$, AdamW, early stopping after $5$ non-improving validation rounds). Every student is randomly initialized and trained for $3$ epochs (learning rate $1\times10^{-4}$, no early stopping), minimizing \eqref{eq:loss}.
 
 \begin{align}
 \mathcal{L} &= \alpha\,\mathcal{L}_{CE} + (1-\alpha)\,T^2 D_{KL}\left(P_P \Vert P_S\right) \notag \\
@@ -231,7 +238,7 @@ A striking pattern underlies this: $B$, $S_0$, $S_1$, and $S_2$ converge toward 
 
 \section*{Acknowledgment}
 
-The writing of this manuscript was partially assisted by generative language models used exclusively for stylistic revision and textual reformulation tasks: Claude Sonnet 4.6 \cite{anthropic2025claude} (Anthropic).
+The authors extend their sincere gratitude to Dr. Mauricio Velasco for his valuable feedback. The writing of this manuscript was partially assisted by generative language models used exclusively for stylistic revision and textual reformulation tasks: Claude Sonnet 4.6 \cite{anthropic2025claude} (Anthropic).
 
 \bibliographystyle{plain}
 \bibliography{references}
