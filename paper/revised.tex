@@ -22,6 +22,25 @@
 
 \title{Does Functional Similarity Induced by Distillation Preserve Internal Representations and Explanatory Mechanisms?\thanks{This research was funded by the Agencia Nacional de Investigaci\'on e Innovaci\'on (ANII), Uruguay, grant number POS\_NAC\_2025\_4\_189264.}}
 
+\author{\IEEEauthorblockN{1\textsuperscript{st} Martin Luca Perciante}
+\IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
+\textit{Universidad Católica del Uruguay}\\
+Montevideo, Uruguay \\
+martinluca.perciante@ucu.edu.uy}
+\and
+\IEEEauthorblockN{2\textsuperscript{nd} Given Name Surname}
+\IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
+\textit{Universidad Católica del Uruguay}\\
+Montevideo, Uruguay \\
+email address or ORCID}
+\and
+\IEEEauthorblockN{3\textsuperscript{rd} Given Name Surname}
+\IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
+\textit{Universidad Católica del Uruguay}\\
+Montevideo, Uruguay \\
+email address or ORCID}
+}
+
 \begin{document}
 
 \maketitle
@@ -95,31 +114,31 @@ Explanations from \textbf{LIME}, \textbf{SHAP}, and \textbf{Integrated Gradients
 
 \subsection{Comparison Metrics}\label{sec:metrics}
 
-We compare Attention maps with complementary geometric, probabilistic, and spectral measures. Given two attention matrices $A,B$ and their vectorizations $\vec A, \vec B$, we compared them via \textit{cosine similarity} $\cos(\theta)=\langle \vec A,\vec B\rangle/(\|\vec A\|_2\|\vec B\|_2)\in[-1,1]$, the \textit{Frobenius distance} $d_F(A,B)=\|A-B\|_F=\sum_{i,j}(A-B)^2_{ij}$ and the row-averaged \textit{Jensen--Shannon divergence} $\frac{1}{n}\sum_i JS(A_i||B_i)$ were $A_i$ is the $i_{th}$ row of $A$. Since Attention maps are $n \times n$ row-stochastic matrices, the \textit{Frobenius distance} is bounded by $\sqrt{2n}$ ($64$ for our $n=2048$ maps). The \textit{Jensen--Shannon divergence} is theoretically bounded in $[0,\ln 2]$ if measured in nats \cite{lin1991divergence}, where $0$ means equal distributions. For spectral metrics we propose the entropy-based \textit{effective rank} \cite{roy2007effective} and the \textit{Participation Ratio} \cite{recanatesi2022scale}.
+We compare Attention maps with complementary geometric, probabilistic, and spectral measures. Given two attention matrices $A,B$ and their vectorizations $\vec A, \vec B$, we compared them via \textit{cosine similarity} $\cos(\theta)=\langle \vec A,\vec B\rangle/(\|\vec A\|_2\|\vec B\|_2)\in[-1,1]$, the \textit{Frobenius distance} $d_F(A,B)=\|A-B\|_F=\sum_{i,j}(A-B)^2_{ij}$ and the row-averaged \textit{Jensen--Shannon divergence} $\frac{1}{n}\sum_i JS(A_i||B_i)$ were $A_i$ is the $i_{th}$ row of $A$. For $n \times n$ Attention maps, the \textit{Frobenius distance} is bounded by $\sqrt{2n}$ ($64$ for our $n=2048$ maps). The \textit{Jensen--Shannon divergence} is theoretically bounded in $[0,\ln 2]$ if measured in nats \cite{lin1991divergence}, where $0$ means equal distributions. For spectral metrics we propose the entropy-based \textit{effective rank} \cite{roy2007effective} and the \textit{Participation Ratio} \cite{recanatesi2022scale}.
 
 For evaluating explainability methods, we compute aggregate metrics over held-out samples, comparing each student's word-level attribution against the teacher's for every method. Metrics include top-$k$ \textit{Jaccard overlap} ($k=10$), \textit{Spearman correlation} of signed scores over the common attributed vocabulary, and deletion-based \textit{faithfulness@$k$} \cite{deyoung2020eraser}, the drop in true-class probability after masking the top-$k$ words (computed per model, including the teacher, as reference). Given \textbf{LIME's} stochastic nature, we also measure \textit{stability} as the Jaccard@10 mean across $5$ re-runs with different seeds.
 
 \subsection{Evaluation on the Test Set}\label{sec:test-eval}
 
-Table~\ref{tab:perf} reports classification performance and average $KL$ divergence to the teacher ($T=1,2$) for all models on both datasets. On \textbf{IMDb}, distillation's effect on accuracy is mixed: only the class-restricted $S_2$ edges out the non-distilled $B$ ($0.87$ vs.\ $0.86$), while $S_0$ and $S_1$ both \emph{underperform} $B$ ($0.81$ and $0.80$), i.e.\ the distillation term hurts relative to training from scratch. On \textbf{AG News}, this pattern is more pronounced: $B$ achieves the \emph{highest} accuracy of all five models ($B>S_0>S_2>S_1>P$). $KL$ fidelity, by contrast, follows the same monotonic pattern on \emph{both} datasets and temperatures: $B$ is by far the least faithful, improving with distillation strength ($B>S_0>S_1\gtrsim S_2$). Notably, on \textbf{IMDb} $S_1$ attains \emph{lower} $KL$ than $S_2$ despite worse accuracy: global $KL$ divergence is not a predictive proxy for classification performance, nor, as shown below, of explanatory or representational alignment.
+Table~\ref{tab:perf} reports classification performance and average $KL$ divergence to the teacher ($T=1,2$) for all models on both datasets. On \textbf{IMDb}, distillation's effect on accuracy is mixed: only the class-restricted $S_2$ edges out the non-distilled $B$ ($0.867$ vs.\ $0.857$), while $S_0$ and $S_1$ both \emph{underperform} $B$ ($0.813$ and $0.798$), i.e.\ the distillation term hurts relative to training from scratch. On \textbf{AG News}, this pattern is more pronounced: $B$ achieves the \emph{highest} accuracy of all five models ($B>S_0>S_2>S_1>P$). $KL$ fidelity, by contrast, follows the same monotonic pattern on \emph{both} datasets and temperatures: $B$ is by far the least faithful, improving with distillation strength ($B>S_0>S_1\gtrsim S_2$). Notably, on \textbf{IMDb} $S_1$ attains \emph{lower} $KL$ than $S_2$ despite worse accuracy: global $KL$ divergence is not a predictive proxy for classification performance, nor, as shown below, of explanatory or representational alignment.
 
 \begin{table}[tb]
 \centering
-\caption{Accuracy / F1 (macro-averaged for \textbf{AG News}) on the test set, and average $KL$ divergence to the teacher $P$ at $T=1,2$ (\textbf{IMDb}: $N=3000$ balanced subset; \textbf{AG News}: full test set).}
+\caption{Accuracy / F1 (macro-averaged for \textbf{AG News}) on the test set, and average $KL$ divergence to the teacher $P$ at $T=1,2$ (\textbf{IMDb}: $N=3000$ balanced subset; \textbf{AG News}: full test set). Bold: best model per column per dataset; underlined: second-best.}
 \small
 \begin{tabular}{|l|l|c|c|c|c|c|}
 \hline
 Dataset & Model & Acc. & F1 & $KL_{T=1}$ & $KL_{T=2}$ \\ \hline
-\textbf{IMDb} & $P$ & $0.95$ & $0.95$ & -- & -- \\
-\textbf{IMDb} & $B$ & $0.86$ & $0.86$ & $2.85$ & $1.69$ \\
-\textbf{IMDb} & $S_0$ & $0.81$ & $0.81$ & $0.10$ & $0.13$ \\
-\textbf{IMDb} & $S_1$ & $0.80$ & $0.80$ & $0.10$ & $0.13$ \\
-\textbf{IMDb} & $S_2$ & $0.87$ & $0.87$ & $0.11$ & $0.19$ \\ \hline
-\textbf{AG News} & $P$ & $0.85$ & $0.85$ & -- & -- \\
-\textbf{AG News} & $B$ & $0.89$ & $0.89$ & $2.08$ & $1.78$ \\
-\textbf{AG News} & $S_0$ & $0.88$ & $0.88$ & $0.63$ & $0.42$ \\
-\textbf{AG News} & $S_1$ & $0.88$ & $0.88$ & $0.28$ & $0.23$ \\
-\textbf{AG News} & $S_2$ & $0.88$ & $0.88$ & $0.25$ & $0.25$ \\ \hline
+\textbf{IMDb} & $P$ & $\mathbf{0.954}$ & $\mathbf{0.954}$ & -- & -- \\
+\textbf{IMDb} & $B$ & $0.857$ & $0.857$ & $2.847$ & $1.686$ \\
+\textbf{IMDb} & $S_0$ & $0.813$ & $0.810$ & $\mathbf{0.103}$ & $\underline{0.131}$ \\
+\textbf{IMDb} & $S_1$ & $0.798$ & $0.797$ & $\underline{0.104}$ & $\mathbf{0.127}$ \\
+\textbf{IMDb} & $S_2$ & $\underline{0.867}$ & $\underline{0.867}$ & $0.111$ & $0.192$ \\ \hline
+\textbf{AG News} & $P$ & $0.848$ & $0.847$ & -- & -- \\
+\textbf{AG News} & $B$ & $\mathbf{0.886}$ & $\mathbf{0.886}$ & $2.080$ & $1.784$ \\
+\textbf{AG News} & $S_0$ & $\underline{0.883}$ & $\underline{0.883}$ & $0.629$ & $0.418$ \\
+\textbf{AG News} & $S_1$ & $0.878$ & $0.878$ & $\underline{0.278}$ & $\mathbf{0.228}$ \\
+\textbf{AG News} & $S_2$ & $0.880$ & $0.880$ & $\mathbf{0.247}$ & $\underline{0.246}$ \\ \hline
 \end{tabular}
 \label{tab:perf}
 \end{table}
@@ -140,110 +159,65 @@ Table~\ref{tab:explanation_metrics} reports aggregate \textbf{LIME} agreement (v
 
 \begin{table}[bp]
 \centering
-\caption{\textbf{LIME} stability (mean pairwise Jaccard@10 across $5$ seeds, $N=20$), both datasets.}
+\caption{\textbf{LIME} stability (mean pairwise Jaccard@10 across $5$ seeds, $N=20$), both datasets. Bold: best model per row; underlined: second-best.}
 \small
 \begin{tabular}{|l|c|c|c|c|c|}
 \hline
 Dataset & $P$ & $B$ & $S_0$ & $S_1$ & $S_2$ \\ \hline
-\textbf{IMDb} & $0.55$ & $0.59$ & $0.68$ & $0.61$ & $0.71$ \\
-\textbf{AG News} & $0.77$ & $0.67$ & $0.64$ & $0.62$ & $0.69$ \\ \hline
+\textbf{IMDb} & $0.548$ & $0.587$ & $\underline{0.684}$ & $0.611$ & $\mathbf{0.710}$ \\
+\textbf{AG News} & $\mathbf{0.773}$ & $0.668$ & $0.638$ & $0.614$ & $\underline{0.688}$ \\ \hline
 \end{tabular}
 \label{tab:stability}
 \end{table}
 
 \subsection{Representational Comparison}\label{sec:repr-comparison}
 
-Table~\ref{tab:repr_metrics} reports cosine similarity, Frobenius distance, and Jensen--Shannon divergence between each student's attention map and the teacher's average ($P_{avg}$, matched via the $2{:}1$ correspondence), across six layers per dataset (full $11$-layer tables are in the extended version). On \textbf{IMDb}, $B$ is slightly lower than the three distilled variants at most layers by cosine similarity, some evidence for attention alignment with the teacher. In \textbf{AG News}, however, the pattern is reversed: $B$ is comparable to, and at several layers more similar to, the teacher than any distilled variant. Both datasets thus suggest attention-level similarity to the teacher is not a reliable signature of distillation, since the non-distilled baseline is nearly as close, or closer, to the teacher's attention geometry.
+Fig.~\ref{fig:teacher_avg_comparison_grid} reports cosine similarity, Frobenius distance, and Jensen--Shannon divergence between each student's attention map and the teacher's average ($P_{avg}$, matched via the $2{:}1$ correspondence), across all $11$ layers per dataset. On \textbf{IMDb}, $B$ is slightly lower than the three distilled variants at most layers by cosine similarity, some evidence for attention alignment with the teacher. In \textbf{AG News}, however, the pattern is reversed: $B$ is comparable to, and at several layers more similar to, the teacher than any distilled variant. Both datasets thus suggest attention-level similarity to the teacher is not a reliable signature of distillation, since the non-distilled baseline is nearly as close, or closer, to the teacher's attention geometry.
 
 \begin{table*}[tb]
 \centering
-\caption{\textbf{LIME}, \textbf{SHAP}, and \textbf{Integrated Gradients} (IG, zero baseline) Jaccard@10, Spearman $\rho$, and Faithfulness@10 vs.\ teacher, both datasets ($N=100$, $k=10$).}
+\caption{\textbf{LIME}, \textbf{SHAP}, and \textbf{Integrated Gradients} (IG, zero baseline) Jaccard@10, Spearman $\rho$, and Faithfulness@10 vs.\ teacher, both datasets ($N=100$, $k=10$). Bold: best model per column per dataset; underlined: second-best (SHAP Faithf.\ on \textbf{AG News} not marked, as all models are near-zero -- see \S\ref{sec:functional-eval}).}
 \footnotesize
 \begin{tabular}{|l|l|c|c|c|c|c|c|c|c|c|}
 \hline
 \multirow{2}{*}{Dataset} & \multirow{2}{*}{Model} & \multicolumn{3}{c|}{LIME} & \multicolumn{3}{c|}{SHAP} & \multicolumn{3}{c|}{IG} \\
 \cline{3-11}
  & & Jac.@10 & $\rho$ & Faithf. & Jac.@10 & $\rho$ & Faithf. & Jac.@10 & $\rho$ & Faithf. \\ \hline
-\textbf{IMDb} & $P$ & -- & -- & $0.17$ & -- & -- & $0.12$ & -- & -- & $0.01$ \\
-\textbf{IMDb} & $B$ & $0.18$ & $0.25$ & $0.08$ & $0.12$ & $0.24$ & $0.03$ & $0.79$ & $-0.01$ & $0.01$ \\
-\textbf{IMDb} & $S_0$ & $0.17$ & $0.22$ & $0.20$ & $0.12$ & $0.24$ & $0.09$ & $0.78$ & $0.03$ & $0.09$ \\
-\textbf{IMDb} & $S_1$ & $0.14$ & $0.19$ & $0.18$ & $0.10$ & $0.25$ & $0.06$ & $0.81$ & $0.01$ & $0.03$ \\
-\textbf{IMDb} & $S_2$ & $0.21$ & $0.30$ & $0.27$ & $0.18$ & $0.33$ & $0.12$ & $0.79$ & $0.04$ & $0.02$ \\
+\textbf{IMDb} & $P$ & -- & -- & $0.172$ & -- & -- & $\underline{0.118}$ & -- & -- & $0.010$ \\
+\textbf{IMDb} & $B$ & $\underline{0.183}$ & $\underline{0.248}$ & $0.083$ & $0.117$ & $0.239$ & $0.025$ & $\underline{0.793}$ & $-0.005$ & $0.010$ \\
+\textbf{IMDb} & $S_0$ & $0.170$ & $0.216$ & $\underline{0.202}$ & $\underline{0.123}$ & $0.238$ & $0.093$ & $0.778$ & $\underline{0.028}$ & $\mathbf{0.085}$ \\
+\textbf{IMDb} & $S_1$ & $0.136$ & $0.189$ & $0.177$ & $0.096$ & $\underline{0.245}$ & $0.058$ & $\mathbf{0.814}$ & $0.010$ & $\underline{0.025}$ \\
+\textbf{IMDb} & $S_2$ & $\mathbf{0.212}$ & $\mathbf{0.299}$ & $\mathbf{0.267}$ & $\mathbf{0.176}$ & $\mathbf{0.333}$ & $\mathbf{0.120}$ & $0.787$ & $\mathbf{0.039}$ & $0.019$ \\
 \hline
-\textbf{AG News} & $P$ & -- & -- & $0.14$ & -- & -- & $0.00$ & -- & -- & $0.05$ \\
-\textbf{AG News} & $B$ & $0.34$ & $0.32$ & $0.31$ & $0.32$ & $0.27$ & $-0.00$ & $0.89$ & $0.02$ & $0.07$ \\
-\textbf{AG News} & $S_0$ & $0.35$ & $0.28$ & $0.40$ & $0.32$ & $0.28$ & $0.00$ & $0.88$ & $0.04$ & $0.16$ \\
-\textbf{AG News} & $S_1$ & $0.34$ & $0.31$ & $0.30$ & $0.32$ & $0.27$ & $0.00$ & $0.88$ & $-0.04$ & $0.14$ \\
-\textbf{AG News} & $S_2$ & $0.34$ & $0.34$ & $0.43$ & $0.31$ & $0.26$ & $-0.00$ & $0.89$ & $0.01$ & $0.34$ \\ \hline
+\textbf{AG News} & $P$ & -- & -- & $0.138$ & -- & -- & $0.002$ & -- & -- & $0.053$ \\
+\textbf{AG News} & $B$ & $0.336$ & $\underline{0.321}$ & $0.306$ & $0.315$ & $\underline{0.269}$ & $-0.002$ & $\mathbf{0.890}$ & $\underline{0.021}$ & $0.067$ \\
+\textbf{AG News} & $S_0$ & $\underline{0.347}$ & $0.279$ & $\underline{0.402}$ & $\underline{0.317}$ & $\mathbf{0.274}$ & $0.000$ & $0.883$ & $\mathbf{0.040}$ & $\underline{0.162}$ \\
+\textbf{AG News} & $S_1$ & $0.341$ & $0.306$ & $0.299$ & $\mathbf{0.320}$ & $0.267$ & $0.000$ & $0.876$ & $-0.036$ & $0.138$ \\
+\textbf{AG News} & $S_2$ & $\mathbf{0.358}$ & $\mathbf{0.342}$ & $\mathbf{0.431}$ & $0.311$ & $0.262$ & $-0.000$ & $\underline{0.888}$ & $0.013$ & $\mathbf{0.340}$ \\ \hline
 \end{tabular}
 \label{tab:explanation_metrics}
 \end{table*}
 
-\begin{table*}[tb]
-\centering
-\caption{Cosine similarity, Frobenius distance, and Jensen--Shannon divergence between each student's attention map and the teacher's $P_{avg}$, across layers $i$ (Frobenius theoretical maximum $\sqrt{2n}=64$ for $n=2048$).}
-\footnotesize
-\begin{tabular}{|l|c|c|c|c|c|c|c|c|c|c|c|c|c|}
-\hline
-\multirow{2}{*}{Dataset} & \multirow{2}{*}{$i$} & \multicolumn{4}{c|}{Cosine} & \multicolumn{4}{c|}{Frobenius} & \multicolumn{4}{c|}{$JS$} \\
-\cline{3-14}
- & & $B$ & $S_0$ & $S_1$ & $S_2$ & $B$ & $S_0$ & $S_1$ & $S_2$ & $B$ & $S_0$ & $S_1$ & $S_2$ \\ \hline
-\textbf{IMDb} & $0$ & $0.93$ & $0.92$ & $0.94$ & $0.92$ & $1.27$ & $1.36$ & $1.24$ & $1.35$ & $0.01$ & $0.02$ & $0.01$ & $0.02$ \\
-\textbf{IMDb} & $2$ & $0.29$ & $0.42$ & $0.46$ & $0.63$ & $36.28$ & $35.66$ & $35.44$ & $33.95$ & $0.43$ & $0.39$ & $0.38$ & $0.34$ \\
-\textbf{IMDb} & $3$ & $0.23$ & $0.43$ & $0.50$ & $0.69$ & $39.12$ & $38.21$ & $37.84$ & $36.46$ & $0.49$ & $0.44$ & $0.43$ & $0.39$ \\
-\textbf{IMDb} & $4$ & $0.15$ & $0.37$ & $0.42$ & $0.65$ & $26.46$ & $25.50$ & $25.08$ & $22.95$ & $0.38$ & $0.31$ & $0.30$ & $0.26$ \\
-\textbf{IMDb} & $7$ & $0.13$ & $0.26$ & $0.48$ & $0.38$ & $18.04$ & $17.39$ & $16.08$ & $16.81$ & $0.37$ & $0.27$ & $0.24$ & $0.25$ \\
-\textbf{IMDb} & $10$ & $0.14$ & $0.27$ & $0.23$ & $0.16$ & $21.31$ & $20.66$ & $20.85$ & $21.18$ & $0.41$ & $0.30$ & $0.31$ & $0.32$ \\
-\hline
-\textbf{AG News} & $0$ & $0.98$ & $0.97$ & $0.97$ & $0.98$ & $1.08$ & $1.46$ & $1.39$ & $1.22$ & $0.01$ & $0.01$ & $0.01$ & $0.01$ \\
-\textbf{AG News} & $2$ & $0.43$ & $0.32$ & $0.23$ & $0.37$ & $39.22$ & $40.16$ & $40.64$ & $39.64$ & $0.45$ & $0.48$ & $0.50$ & $0.47$ \\
-\textbf{AG News} & $3$ & $0.44$ & $0.39$ & $0.22$ & $0.23$ & $37.78$ & $38.51$ & $39.48$ & $39.45$ & $0.42$ & $0.43$ & $0.47$ & $0.47$ \\
-\textbf{AG News} & $4$ & $0.52$ & $0.35$ & $0.29$ & $0.35$ & $21.42$ & $22.96$ & $23.26$ & $22.91$ & $0.25$ & $0.23$ & $0.23$ & $0.22$ \\
-\textbf{AG News} & $7$ & $0.27$ & $0.34$ & $0.33$ & $0.28$ & $18.05$ & $17.52$ & $17.57$ & $17.91$ & $0.31$ & $0.23$ & $0.22$ & $0.25$ \\
-\textbf{AG News} & $10$ & $0.31$ & $0.27$ & $0.23$ & $0.26$ & $19.33$ & $19.52$ & $19.82$ & $19.62$ & $0.30$ & $0.24$ & $0.26$ & $0.25$ \\ \hline
-\end{tabular}
-\label{tab:repr_metrics}
-\end{table*}
+By contrast, Frobenius distance and $JS$ divergence (Fig.~\ref{fig:teacher_avg_comparison_grid}) are nearly indistinguishable across all four models at every layer on both datasets, following the same profile: near-perfect alignment at $i=0$, peaking at $i=2$--$3$ (Frobenius $34$--$41$ out of a theoretical maximum of $64$; $JS$ $0.34$--$0.50$), then stabilizing by $i=4$--$10$. At an even finer grain, per-head attention-similarity analysis shows $B$ numerically indistinguishable from the three distilled students on \emph{both} datasets -- the clearest evidence that per-head similarity to the teacher is insensitive to whether a model was distilled.
 
-By contrast, Frobenius distance and $JS$ divergence (Table~\ref{tab:repr_metrics}) are nearly indistinguishable across all four models at every layer on both datasets, following the same profile: near-perfect alignment at $i=0$, peaking at $i=2$--$3$ (Frobenius $34$--$41$ out of a theoretical maximum of $64$; $JS$ $0.34$--$0.50$), then stabilizing by $i=4$--$10$. At an even finer grain, per-head attention-similarity analysis shows $B$ numerically indistinguishable from the three distilled students on \emph{both} datasets -- the clearest evidence that per-head similarity to the teacher is insensitive to whether a model was distilled.
-
-Table~\ref{tab:spectral} reports Participation Ratio ($PR$) and entropy-based effective rank ($ER$) on both datasets, at the same layers as Table~\ref{tab:repr_metrics}. On both measures, $P_{avg}$ stays close to rank-one throughout, while the four students show no consistent ranking: on \textbf{AG News}, $B$ trends from lowest to highest as depth increases on both $PR$ and $ER$; on \textbf{IMDb}, the relative order among $B$, $S_0$, $S_1$, and $S_2$ instead shifts from layer to layer. Spectral complexity is therefore not obviously ordered by distillation strength on either dataset.
+Fig.~\ref{fig:teacher_avg_comparison_grid} also reports Participation Ratio ($PR$) and entropy-based effective rank ($ER$) on both datasets. On both measures, $P_{avg}$ stays close to rank-one throughout, while the four students show no consistent ranking: on \textbf{AG News}, $B$ trends from lowest to highest as depth increases on both $PR$ and $ER$; on \textbf{IMDb}, the relative order among $B$, $S_0$, $S_1$, and $S_2$ instead shifts from layer to layer. Spectral complexity is therefore not obviously ordered by distillation strength on either dataset.
 
 \subsection{Discussion}\label{sec:discussion}
 
 Taken together, these results indicate that, at least in the studied settings, standard KD does not directly induce alignment of either explanatory mechanisms or internal representations between teacher and student. Both properties instead appear to emerge from the shared dataset and task rather than from the distillation term itself. Distillation's only clearly attributable effect is distributional: it reliably pulls the student's output distribution toward the teacher's (Table~\ref{tab:perf}). Accuracy itself is barely affected by distillation, and inconsistently so across datasets -- but these remain well-behaved, competitive classifiers, worth studying on those terms alone.
 
-This dissociation is not incidental: if explanatory or representational alignment were induced by the distillation term itself, both should track distillation strength (i.e.\ $KL$ fidelity) directly. On \textbf{IMDb}, $S_1$ attains \emph{lower} $KL$ than $S_2$ (Table~\ref{tab:perf}) yet is markedly less \textbf{LIME}/\textbf{SHAP}-aligned with the teacher, the opposite of what a distillation-driven account would predict; \textbf{Integrated Gradients} shows no consistent best-aligned student at all, despite the same spread in $KL$ fidelity. On \textbf{AG News}, $B$ shows no disadvantage, and at several layers an advantage, in attention-level similarity to the teacher (Table~\ref{tab:repr_metrics}), despite having the highest accuracy of all five models. Neither similarity scales with distillation strength, reinforcing that the shared task and data are the more likely source of teacher-student similarity.
+This dissociation is not incidental: if explanatory or representational alignment were induced by the distillation term itself, both should track distillation strength (i.e.\ $KL$ fidelity) directly. On \textbf{IMDb}, $S_1$ attains \emph{lower} $KL$ than $S_2$ (Table~\ref{tab:perf}) yet is markedly less \textbf{LIME}/\textbf{SHAP}-aligned with the teacher, the opposite of what a distillation-driven account would predict; \textbf{Integrated Gradients} shows no consistent best-aligned student at all, despite the same spread in $KL$ fidelity. On \textbf{AG News}, $B$ shows no disadvantage, and at several layers an advantage, in attention-level similarity to the teacher (Fig.~\ref{fig:teacher_avg_comparison_grid}), despite having the highest accuracy of all five models. Neither similarity scales with distillation strength, reinforcing that the shared task and data are the more likely source of teacher-student similarity.
+
+\begin{figure*}[tb]
+\centering
+\includegraphics[width=\textwidth]{../images/teacher_avg_comparison_grid.png}
+\caption{Cosine similarity, Frobenius distance, $JS$ divergence, $PR$, and $ER$ vs.\ teacher $P_{avg}$ across all $11$ layers, both datasets ($B$, $S_0$, $S_1$, $S_2$; rows: \textbf{IMDb}, \textbf{AG News}).}
+\label{fig:teacher_avg_comparison_grid}
+\end{figure*}
 
 \subsection{Does Distillation Add Value Beyond Depth Reduction?}\label{sec:distillation-value}
 
 Distillation's only robust, task-independent effect is pulling the student's output distribution toward the teacher's. Its effects on accuracy, explanatory alignment, and fine-grained representational similarity are comparatively small, inconsistent across datasets, and, for attention geometry, largely absent once a non-distilled baseline is available for comparison.
-
-\begin{table*}[tb]
-\centering
-\caption{Participation Ratio ($PR$) and entropy-based effective rank ($ER$), at layers $i$, both datasets.}
-\footnotesize
-\begin{tabular}{|l|c|c|c|c|c|c|c|c|c|c|c|}
-\hline
-\multirow{2}{*}{Dataset} & \multirow{2}{*}{$i$} & \multicolumn{5}{c|}{$PR$} & \multicolumn{5}{c|}{$ER$} \\
-\cline{3-12}
- & & $B$ & $S_0$ & $S_1$ & $S_2$ & $P_{avg}$ & $B$ & $S_0$ & $S_1$ & $S_2$ & $P_{avg}$ \\ \hline
-\textbf{IMDb} & $0$ & $2.6$ & $2.6$ & $2.5$ & $2.7$ & $3.3$ & $60$ & $117$ & $96$ & $107$ & $309$ \\
-\textbf{IMDb} & $2$ & $3.4$ & $3.0$ & $2.5$ & $1.7$ & $1.0$ & $278$ & $298$ & $230$ & $180$ & $5$ \\
-\textbf{IMDb} & $3$ & $2.9$ & $3.3$ & $2.5$ & $2.0$ & $1.0$ & $328$ & $398$ & $304$ & $361$ & $7$ \\
-\textbf{IMDb} & $4$ & $5.0$ & $4.4$ & $4.3$ & $2.4$ & $1.0$ & $315$ & $437$ & $517$ & $485$ & $20$ \\
-\textbf{IMDb} & $7$ & $13.7$ & $13.4$ & $7.5$ & $7.1$ & $1.0$ & $505$ & $555$ & $505$ & $488$ & $84$ \\
-\textbf{IMDb} & $10$ & $9.7$ & $8.6$ & $17.0$ & $12.5$ & $1.0$ & $491$ & $509$ & $551$ & $528$ & $129$ \\
-\hline
-\textbf{AG News} & $0$ & $1.3$ & $1.3$ & $1.4$ & $1.4$ & $1.4$ & $13$ & $14$ & $16$ & $18$ & $24$ \\
-\textbf{AG News} & $2$ & $1.6$ & $1.4$ & $1.7$ & $2.0$ & $1.0$ & $29$ & $14$ & $31$ & $39$ & $1$ \\
-\textbf{AG News} & $3$ & $1.9$ & $1.4$ & $1.9$ & $2.1$ & $1.0$ & $40$ & $19$ & $32$ & $51$ & $2$ \\
-\textbf{AG News} & $4$ & $1.9$ & $1.4$ & $1.8$ & $1.9$ & $1.0$ & $42$ & $20$ & $47$ & $55$ & $3$ \\
-\textbf{AG News} & $7$ & $3.4$ & $1.5$ & $1.8$ & $1.6$ & $1.0$ & $62$ & $32$ & $47$ & $47$ & $5$ \\
-\textbf{AG News} & $10$ & $3.3$ & $1.6$ & $1.7$ & $1.8$ & $1.0$ & $66$ & $28$ & $40$ & $43$ & $6$ \\ \hline
-\end{tabular}
-\label{tab:spectral}
-\end{table*}
 
 \subsection{Limitations}\label{sec:limitations}
 
