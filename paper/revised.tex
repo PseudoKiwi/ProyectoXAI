@@ -22,24 +22,7 @@
 
 \title{Does Functional Similarity Induced by Distillation Preserve Internal Representations and Explanatory Mechanisms in Autoregressive Models?\thanks{This research was funded by the Agencia Nacional de Investigaci\'on e Innovaci\'on (ANII), Uruguay, under code POS\_NAC\_2025\_4\_189264.}}
 
-\author{\IEEEauthorblockN{1\textsuperscript{st} Martin Luca Perciante}
-\IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
-\textit{Universidad Católica del Uruguay}\\
-Montevideo, Uruguay \\
-martinluca.perciante@ucu.edu.uy}
-\and
-\IEEEauthorblockN{2\textsuperscript{nd} Given Name Surname}
-\IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
-\textit{Universidad Católica del Uruguay}\\
-Montevideo, Uruguay \\
-email address or ORCID}
-\and
-\IEEEauthorblockN{3\textsuperscript{rd} Given Name Surname}
-\IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
-\textit{Universidad Católica del Uruguay}\\
-Montevideo, Uruguay \\
-email address or ORCID}
-}
+
 
 \begin{document}
 
@@ -72,7 +55,7 @@ This work contributions are:
 
 \section{Related Work}
 
-Knowledge distillation (KD) transfers information from a high-capacity teacher to a smaller student by adding a Kullback--Leibler ($KL$) divergence term to the loss function, often softened by a temperature $T$ \cite{hinton2015distilling}. KD is widely used in deep networks and large language models, but its success is evaluated almost exclusively via functional metrics such as accuracy \cite{gou2021knowledge}. Some works explicitly bias the loss towards representational alignment, such as Attention Distillation \cite{zhou2025attentiondistillationunifiedapproach}, which directly supervises student attention maps against the teacher's.
+Knowledge distillation (KD) transfers information from a high-capacity teacher to a smaller student by adding a Kullback--Leibler ($KL$) divergence term to the loss function, often softened by a temperature $T$ \cite{hinton2015distilling}. KD is widely used in deep networks and large language models, but its success is evaluated almost exclusively via functional metrics such as accuracy \cite{gou2021knowledge}. Some works explicitly bias the loss towards representational alignment, such as Attention Distillation \cite{zhou2025attention}, which directly supervises student attention maps against the teacher's.
 
 Post-hoc explainability methods such as \textbf{LIME} \cite{ribeiro2016should} and \textbf{SHAP} \cite{lundberg2017unified} treat the model as a black box, while gradient-based methods such as \textbf{Integrated Gradients} \cite{sundararajan2017axiomatic} exploit differentiability; all three are commonly used to quantify token-level contributions to a prediction. Beyond post-hoc attribution, attention maps offer a potentially interpretable internal mechanism, but whether they constitute a faithful explanation remains contested: Jain and Wallace \cite{jain2019attention} show that alternative attention configurations can induce similar predictions, whereas Wiegreffe and Pinter \cite{wiegreffe2019attention} argue attention can still provide plausible explanations under appropriate conditions.
 
@@ -84,7 +67,7 @@ The project used \textbf{Python}, \textbf{PyTorch}, Hugging Face's \textbf{trans
 
 The teacher is \textbf{TinyLlama-1.1B-Chat-v1.0} \cite{zhang2024tinyllama}, a $22$-layer decoder-only Transformer \cite{vaswani2017attention}. Every student shares the teacher's embeddings, attention mechanism, and hidden dimensions, reducing only depth to $11$ randomly-initialized blocks ($2{:}1$ Transformer layer correspondence; compression rate $CR\approx1.787$, $\approx44\%$).
 
-The studied problem is reformulated as a generative classification \cite{schick2021exploiting}, where class-labels are single vocabulary tokens. Dataset inputs are inserted into a fixed prompt template, and only the class-token logits are compared at inference. For \textbf{IMDb} \cite{maas-EtAl:2011:ACL-HLT2011} ($50000$ reviews, labels \textit{positive}/\textit{negative}), the template is \texttt{"Review: \{input\} Summary:"}; filtered to the teacher's $2048$-token context, splits are $22492$/$2500$/$24995$ (train/val/test). For \textbf{AG News} \cite{zhang2015character} ($4$ classes: \textit{World}, \textit{Sports}, \textit{Business}, \textit{Sci/Tech}), the template is \texttt{"Article: \{input\} Theme:"}. Since \textit{Sci/Tech} tokenizes to four sub-tokens, it is relabeled \textit{Science} (one token) purely to preserve the single-token framing. Splits are $30000$/$100$/$7600$ (balanced). All other hyperparameters are shared across datasets.
+The studied problem is reformulated as a generative classification \cite{schick2021exploiting}, where class-labels are single vocabulary tokens. Dataset inputs are inserted into a fixed prompt template, and only the class-token logits are compared at inference. For \textbf{IMDb} \cite{maas2011learning} ($50000$ reviews, labels \textit{positive}/\textit{negative}), the template is \texttt{"Review: \{input\} Summary:"}; filtered to the teacher's $2048$-token context, splits are $22492$/$2500$/$24995$ (train/val/test). For \textbf{AG News} \cite{zhang2015character} ($4$ classes: \textit{World}, \textit{Sports}, \textit{Business}, \textit{Sci/Tech}), the template is \texttt{"Article: \{input\} Theme:"}. Since \textit{Sci/Tech} tokenizes to four sub-tokens, it is relabeled \textit{Science} (one token) purely to preserve the single-token framing. Splits are $30000$/$100$/$7600$ (balanced). All other hyperparameters are shared across datasets.
 
 The teacher is fully fine-tuned per dataset for one epoch (lr $2\times10^{-5}$, batch size $1$, AdamW, early stopping after $5$ non-improving validation rounds). Every student is randomly initialized and trained for $3$ epochs (lr $1\times10^{-4}$, no early stopping), minimizing \eqref{eq:loss}.
 
