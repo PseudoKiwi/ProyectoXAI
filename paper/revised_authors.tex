@@ -22,12 +22,37 @@
 
 \title{Does Functional Similarity Induced by Distillation Preserve Internal Representations and Explanatory Mechanisms?\thanks{This research was funded by the Agencia Nacional de Investigaci\'on e Innovaci\'on (ANII), Uruguay, grant number POS\_NAC\_2025\_4\_189264.}}
 
+\author{\IEEEauthorblockN{1\textsuperscript{st} Martin Luca Perciante}
+\IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
+\textit{Universidad Católica del Uruguay}\\
+Montevideo, Uruguay \\
+martinluca.perciante@ucu.edu.uy}
+\and
+\IEEEauthorblockN{2\textsuperscript{nd} Given Name Surname}
+\IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
+\textit{Universidad Católica del Uruguay}\\
+Montevideo, Uruguay \\
+email address or ORCID}
+\and
+\IEEEauthorblockN{3\textsuperscript{rd} Given Name Surname}
+\IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
+\textit{Universidad Católica del Uruguay}\\
+Montevideo, Uruguay \\
+email address or ORCID}
+\and
+\IEEEauthorblockN{4\textsuperscript{rd} Given Name Surname}
+\IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
+\textit{Universidad Católica del Uruguay}\\
+Montevideo, Uruguay \\
+email address or ORCID}
+}
+
 \begin{document}
 
 \maketitle
 
 \begin{abstract}
-Knowledge distillation is often evaluated in terms of functional similarity between teacher and student models, measured through predictive performance. However, it remains unclear whether this functional similarity also implies the preservation of internal representations and explanatory mechanisms without explicitly imposing them. This work investigates this question in autoregressive Transformers. A \textbf{TinyLlama} teacher is distilled into a family of 11 attention layer students with different training configurations. Internal representations are compared through layer-wise attention-map metrics, per-head similarity, while explanatory mechanisms are evaluated through \textbf{LIME}, \textbf{SHAP}, and \textbf{Integrated Gradients}, moving beyond qualitative examples to aggregate agreement and deletion-based faithfulness metrics. The study is conducted on binary \textbf{IMDb} sentiment classification and on four-class \textbf{AG News} topic classification. Results show that distillation does not transfer the teacher's explanatory mechanisms on either dataset. Representational similarity, in turn, is only partially and inconsistently attributable to distillation: attention-level and per-head metrics show that a non-distilled baseline is as close to the teacher as the distilled students. These findings suggest that the observed similarity to the teacher is driven more by the shared data and task than by distillation itself, indicating that functional similarity does not, by itself, guarantee the preservation of a teacher's explanatory mechanisms or internal representations.
+Knowledge distillation is often evaluated in terms of functional similarity between teacher and student models, measured through predictive performance. However, it remains unclear whether this functional similarity also implies the preservation of internal representations and explanatory mechanisms without explicitly imposing them. This work investigates this question in autoregressive Transformers. A \textbf{TinyLlama} \cite{zhang2024tinyllama} teacher is distilled into a family of 11 attention layer students with different training configurations. Internal representations are compared through layer-wise attention-map metrics, per-head similarity, while explanatory mechanisms are evaluated through \textbf{LIME}, \textbf{SHAP}, and \textbf{Integrated Gradients}, moving beyond qualitative examples to aggregate agreement and deletion-based faithfulness metrics. The study is conducted on binary \textbf{IMDb} sentiment classification and on four-class \textbf{AG News} topic classification. Results show that distillation does not transfer the teacher's explanatory mechanisms on either dataset. Representational similarity, in turn, is only partially and inconsistently attributable to distillation: attention-level and per-head metrics show that a non-distilled baseline is as close to the teacher as the distilled students. These findings suggest that the observed similarity to the teacher is driven more by the shared data and task than by distillation itself, indicating that functional similarity does not, by itself, guarantee the preservation of a teacher's explanatory mechanisms or internal representations.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -61,7 +86,7 @@ Post-hoc explainability methods such as \textbf{LIME} \cite{ribeiro2016should} a
 
 The project used \textbf{Python}, \textbf{PyTorch}, Hugging Face's \textbf{transformers}, \textbf{lime}/\textbf{shap} for explanation, \textbf{SciPy} for the rank/value-correlation statistics used in the aggregate explanation metrics, and \textbf{scikit-learn} for evaluation metrics.
 
-The teacher is \textbf{TinyLlama-1.1B-Chat-v1.0} \cite{zhang2024tinyllama}, a $22$-layer decoder-only Transformer \cite{vaswani2017attention}. Every student shares the teacher's embeddings, attention mechanism, and hidden dimensions, reducing only depth to $11$ randomly-initialized blocks ($2{:}1$ Transformer layer correspondence; compression rate $CR\approx1.79$, $\approx44\%$).
+The teacher is \textbf{TinyLlama-1.1B-Chat-v1.0} \cite{zhang2024tinyllama}, a $22$-layer decoder-only Transformer \cite{vaswani2017attention}. Every student shares the teacher's embeddings, attention mechanism, and hidden dimensions, reducing only depth to $11$ randomly-initialized blocks ($2{:}1$ Transformer layer correspondence; compression rate $CR\approx1.787$, $\approx44\%$).
 
 The studied problem is reformulated as a generative classification \cite{schick2021exploiting}, where class-labels are single vocabulary tokens. Dataset inputs are inserted into a fixed prompt template, and only the class-token logits are compared at inference. For \textbf{IMDb} \cite{maas2011learning} ($50000$ reviews, labels \textit{positive}/\textit{negative}), the template is \texttt{"Review: \{input\} Summary:"}; filtered to the teacher's $2048$-token context, splits are $22492$/$2500$/$24995$ (train/val/test). For \textbf{AG News} \cite{zhang2015character} ($4$ classes: \textit{World}, \textit{Sports}, \textit{Business}, \textit{Sci/Tech}), the template is \texttt{"Article: \{input\} Theme:"}. Since \textit{Sci/Tech} tokenizes to four sub-tokens, it is relabeled \textit{Science} (one token) purely to preserve the single-token framing. Splits are $30000$/$100$/$7600$ (balanced). All other hyperparameters are shared across datasets.
 
@@ -101,7 +126,7 @@ For evaluating explainability methods, we compute aggregate metrics over held-ou
 
 \subsection{Evaluation on the Test Set}\label{sec:test-eval}
 
-Table~\ref{tab:perf} reports classification performance and average $KL$ divergence to the teacher ($T=1,2$) for all models on both datasets. On \textbf{IMDb}, distillation's effect on accuracy is mixed: only the class-restricted $S_2$ edges out the non-distilled $B$ ($0.87$ vs.\ $0.86$), while $S_0$ and $S_1$ both \emph{underperform} $B$ ($0.81$ and $0.80$), i.e.\ the distillation term hurts relative to training from scratch. On \textbf{AG News}, this pattern is more pronounced: $B$ achieves the \emph{highest} accuracy of all five models ($B>S_0>S_2>S_1>P$). $KL$ fidelity, by contrast, follows the same monotonic pattern on \emph{both} datasets and temperatures: $B$ is by far the least faithful, improving with distillation strength ($B>S_0>S_1\gtrsim S_2$). Notably, on \textbf{IMDb} $S_1$ attains \emph{lower} $KL$ than $S_2$ despite worse accuracy: global $KL$ divergence is not a predictive proxy for classification performance, nor, as shown below, of explanatory or representational alignment.
+Table~\ref{tab:perf} reports classification performance and average $KL$ divergence to the teacher ($T=1,2$) for all models on both datasets. On \textbf{IMDb}, distillation's effect on accuracy is mixed: only the class-restricted $S_2$ edges out the non-distilled $B$ ($0.867$ vs.\ $0.858$), while $S_0$ and $S_1$ both \emph{underperform} $B$ ($0.813$ and $0.798$), i.e.\ the distillation term hurts relative to training from scratch. On \textbf{AG News}, this pattern is more pronounced: $B$ achieves the \emph{highest} accuracy of all five models ($B>S_0>S_2>S_1>P$). $KL$ fidelity, by contrast, follows the same monotonic pattern on \emph{both} datasets and temperatures: $B$ is by far the least faithful, improving with distillation strength ($B>S_0>S_1\gtrsim S_2$). Notably, on \textbf{IMDb} $S_1$ attains \emph{lower} $KL$ than $S_2$ despite worse accuracy: global $KL$ divergence is not a predictive proxy for classification performance, nor, as shown below, of explanatory or representational alignment.
 
 \begin{table}[tb]
 \centering
@@ -188,7 +213,7 @@ Table~\ref{tab:repr_metrics} reports cosine similarity, Frobenius distance, and 
 \multirow{2}{*}{Dataset} & \multirow{2}{*}{$i$} & \multicolumn{4}{c|}{Cosine} & \multicolumn{4}{c|}{Frobenius} & \multicolumn{4}{c|}{$JS$} \\
 \cline{3-14}
  & & $B$ & $S_0$ & $S_1$ & $S_2$ & $B$ & $S_0$ & $S_1$ & $S_2$ & $B$ & $S_0$ & $S_1$ & $S_2$ \\ \hline
-\textbf{IMDb} & $0$ & $0.93$ & $0.92$ & $0.94$ & $0.92$ & $1.27$ & $1.36$ & $1.24$ & $1.35$ & $0.01$ & $0.02$ & $0.01$ & $0.02$ \\
+\textbf{IMDb} & $0$ & $0.93$ & $0.92$ & $0.94$ & $0.92$ & $1.27$ & $1.36$ & $1.24$ & $1.35$ & $0.01$ & $0.018$ & $0.011$ & $0.02$ \\
 \textbf{IMDb} & $2$ & $0.29$ & $0.42$ & $0.46$ & $0.63$ & $36.28$ & $35.66$ & $35.44$ & $33.95$ & $0.43$ & $0.39$ & $0.38$ & $0.34$ \\
 \textbf{IMDb} & $3$ & $0.23$ & $0.43$ & $0.50$ & $0.69$ & $39.12$ & $38.21$ & $37.84$ & $36.46$ & $0.49$ & $0.44$ & $0.43$ & $0.39$ \\
 \textbf{IMDb} & $4$ & $0.15$ & $0.37$ & $0.42$ & $0.65$ & $26.46$ & $25.50$ & $25.08$ & $22.95$ & $0.38$ & $0.31$ & $0.30$ & $0.26$ \\
