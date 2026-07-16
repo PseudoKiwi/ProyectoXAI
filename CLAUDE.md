@@ -33,8 +33,10 @@ siempre:
   plural; no usar "essentially" por "approximately"/"effectively"; no confundir
   imply/infer, affect/effect, principal/principle; "et al." sin punto después de "et";
   "i.e." = "that is", "e.g." = "for example".
-- Bibliografía vía BibTeX (`references.bib`), estilo `plain` (`\bibliographystyle{plain}`).
-  No hardcodear números de cita a mano.
+- Bibliografía vía BibTeX (`references.bib`), estilo `unsrt` (`\bibliographystyle{unsrt}`),
+  que numera las referencias en orden de aparición en el texto (no alfabético) — así lo pide
+  la plantilla IEEE ("number citations consecutively... as in \cite{b3}"). No hardcodear
+  números de cita a mano.
 
 ## Paquetes y convenciones ya establecidas en este proyecto
 

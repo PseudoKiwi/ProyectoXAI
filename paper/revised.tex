@@ -23,23 +23,23 @@
 
 \title{Does Functional Similarity Induced by Distillation Preserve Internal Representations and Explanatory Mechanisms?\thanks{This research was funded by the Agencia Nacional de Investigaci\'on e Innovaci\'on (ANII), Uruguay, grant number POS\_NAC\_2025\_4\_189264.}}
 
-\author{\IEEEauthorblockN{1\textsuperscript{st} Martin Luca Perciante}
-\IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
+\author{\IEEEauthorblockN{Martín L. Perciante}
+\IEEEauthorblockA{\textit{Dpto. de Informática e IA} \\
 \textit{Universidad Católica del Uruguay}\\
 Montevideo, Uruguay \\
 martinluca.perciante@ucu.edu.uy}
 \and
-\IEEEauthorblockN{2\textsuperscript{nd} Fiorella Cravero}
-\IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
+\IEEEauthorblockN{Fiorella Cravero}
+\IEEEauthorblockA{\textit{Dpto. de Informática e IA} \\
 \textit{Universidad Católica del Uruguay}\\
 Montevideo, Uruguay \\
-email address or ORCID}
+fiorella.cravero@ucu.edu.uy}
 \and
-\IEEEauthorblockN{3\textsuperscript{rd} Matías Di Martino}
-\IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
+\IEEEauthorblockN{J. Matías Di Martino}
+\IEEEauthorblockA{\textit{Dpto. de Informática e IA} \\
 \textit{Universidad Católica del Uruguay}\\
 Montevideo, Uruguay \\
-email address or ORCID}
+matias.dimartino@ucu.edu.uy}
 }
 
 \begin{document}
@@ -206,7 +206,7 @@ If explanatory or representational alignment were induced by the distillation te
 
 \subsection{Limitations}\label{sec:limitations}
 
-This study covers only two English text-classification datasets of modest label cardinality; whether the task-dependence between them generalizes to other modalities or higher-cardinality tasks is untested. The $(\alpha,\beta)$ grid is narrow: only two points beyond $S_1$/$S_2$ were tested ($\alpha=1$ for $B$, $\alpha=0.9$ for $S_0$), and the opposite extreme (pure distillation, $\alpha=0$) was never tested. Underlying all of this is a hardware constraint: every experiment ran on a single consumer GPU (RTX 5070 Ti, $16$GB), bounding how many datasets, scales, and architectures could be explored.
+This study is limited to two English datasets for text classification with modest label cardinality; whether the observed task-dependence generalizes to other modalities or to higher-cardinality tasks remains untested. The $(\alpha,\beta)$ grid is narrow: only two points beyond $S_1$/$S_2$ were tested ($\alpha=1$ for $B$, $\alpha=0.9$ for $S_0$), and the opposite extreme (pure distillation, $\alpha=0$) was never tested. Underlying all of this is a hardware constraint: every experiment ran on a single consumer GPU (RTX 5070 Ti, $16$GB), bounding how many datasets, scales, and architectures could be explored.
 
 \section{Conclusions}
 
@@ -220,7 +220,7 @@ A striking pattern underlies the representational side of this: $B$, $S_0$, $S_1
 
 The authors extend their sincere gratitude to Mauricio Velasco for his valuable feedback. The writing of this manuscript was partially assisted by generative language models used exclusively for stylistic revision and textual reformulation tasks: Claude Sonnet 4.6 \cite{anthropic2025claude} (Anthropic).
 
-\bibliographystyle{plain}
+\bibliographystyle{unsrt}
 \bibliography{references}
 
 \end{document}
