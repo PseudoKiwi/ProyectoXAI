@@ -6,7 +6,7 @@ attention $P_{avg}$, across layers $i$. Source: `agnews/model_representational_c
 (cells 21-39, 65-66). Rollout-based comparisons and student-student comparisons are excluded.
 For Teacher $P_{avg}$ itself, cosine/Frobenius/JS are not applicable (self-reference).
 
-| Model | Layer $i$ | Cosine Similarity | Frobenius Distance | JS Divergence | Participation Ratio | Entropy Eff. Rank |
+| Model | Layer $i$ | Cosine Similarity | Frobenius Distance | $D_{JS}$ | PR | ER |
 |---|---|---|---|---|---|---|
 | Teacher $P_{avg}$ | 0 | – | – | – | 1.3684 | 23.9915 |
 | Teacher $P_{avg}$ | 1 | – | – | – | 1.0057 | 4.3148 |
