@@ -8,7 +8,7 @@
  \DeclareGraphicsExtensions{.pdf,.jpeg,.png}
 \else
 \fi
-\usepackage{svg}
+\usepackage{booktabs}
 \usepackage{amsmath}
 \usepackage{amssymb}
 \newcommand{\argmax}{\operatorname*{argmax}}
@@ -81,14 +81,7 @@ Post-hoc explainability methods such as \textbf{LIME} \cite{ribeiro2016should} a
 
 The project used \textbf{Python}, \textbf{PyTorch}, Hugging Face's \textbf{transformers}, \textbf{lime}/\textbf{shap} for explanation, \textbf{SciPy} for the rank/value-correlation statistics used in the aggregate explanation metrics, and \textbf{scikit-learn} for evaluation metrics.
 
-The teacher is \textbf{TinyLlama-1.1B-Chat-v1.0} \cite{zhang2024tinyllama}, a $22$-layer decoder-only Transformer \cite{vaswani2017attention}. Every student shares the teacher's embeddings, attention mechanism, and hidden dimensions, reducing only depth to $11$ randomly-initialized blocks (Fig.~\ref{fig:defined_architecture}). This $2{:}1$ Transformer layer correspondence allows for a clean comparison between teacher and student models, yielding a compression rate $CR\approx1.787$ (approximately a $44\%$ size reduction).
-
-\begin{figure}[bp]
-\centering
-\includesvg[scale=0.7]{../images/architecture_design.svg}
-\caption{Architecture reduction diagram. It reflects the $2{:}1$ layer ratio between the fine-tuned teacher model and the random initialized students.}
-\label{fig:defined_architecture}
-\end{figure}
+The teacher is \textbf{TinyLlama-1.1B-Chat-v1.0} \cite{zhang2024tinyllama}, a $22$-layer decoder-only Transformer \cite{vaswani2017attention}. Every student shares the teacher's embeddings, attention mechanism, and hidden dimensions, reducing only depth to $11$ randomly-initialized blocks. This $2{:}1$ Transformer layer correspondence allows for a clean comparison between teacher and student models, yielding a compression rate $CR\approx1.787$ (approximately a $44\%$ size reduction).
 
 The studied problem is reformulated as a generative classification \cite{schick2021exploiting}, where class-labels are single vocabulary tokens. Dataset inputs are inserted into a fixed prompt template, and only the class-token logits are compared at inference. For \textbf{IMDb} \cite{maas2011learning} ($50000$ reviews, labels \textit{positive}/\textit{negative}), the template is \texttt{"Review: \{input\} Summary:"}; filtered to the teacher's $2048$-token context, splits are $22492$/$2500$/$24995$ (train/val/test). For \textbf{AG News} \cite{zhang2015character} ($4$ classes: \textit{World}, \textit{Sports}, \textit{Business}, \textit{Sci/Tech}), the template is \texttt{"Article: \{input\} Theme:"}. Since \textit{Sci/Tech} tokenizes to four sub-tokens, it is relabeled \textit{Science} (one token) purely to preserve the single-token framing. Splits are $30000$/$100$/$7600$ (balanced). All other hyperparameters are shared across datasets.
 
@@ -100,14 +93,13 @@ The teacher is fully fine-tuned per dataset for one epoch (learning rate $2\time
 \label{eq:loss}
 \end{align}
 
-
 Both teacher $P$ and baseline $B$ were trained with $\alpha=1$, $\beta=0$. $B$ therefore receives no signal from the teacher and shares the reduced architecture with the distilled students, serving as a non-distilled reference. $S_0$ ($\alpha=0.9$, $\beta=0$) is dominated by $\mathcal{L}_{CE}$, whereas $S_1$ ($\alpha=0.5$, $\beta=0$) balances both terms from the dataset and the teacher. These settings configuration allows us to compare $KD$ impact over results. Additionaly, a third student $S_2$ ($\alpha=0.5$, $\beta=0.25$) keeps the same balance between terms, but adds the class-restricted term which reinforces agreement with the teacher specifically over the class-label tokens to help it preserve the teacher's argmax operator between class-labels.
 
 Explanations from \textbf{LIME}, \textbf{SHAP}, and \textbf{Integrated Gradients} (zero-embedding baseline) are compared between teacher and student via aggregate metrics, computed over $N=100$ held-out examples per dataset for all three methods. Representational comparisons use the $2{:}1$ teacher-student layer correspondence: attention maps are averaged over held-out samples ($N=200$) at each layer, and student layer $i$ is then compared against $P_{avg_i}=(P_{2i}+P_{2i+1})/2$, the average of teacher layers $2i$ and $2i+1$. All experiments ran on an NVIDIA RTX 5070 Ti (16GB).
 
 \subsection{Comparison Metrics}\label{sec:metrics}
 
-We compare attention maps with complementary geometric, probabilistic, and spectral measures. Given two attention matrices $A,B$ and their vectorizations $\vec A, \vec B$, we compared them via \textit{cosine similarity} $\cos(\theta)=\langle \vec A,\vec B\rangle/(\|\vec A\|_2\|\vec B\|_2)\in[-1,1]$, the \textit{Frobenius distance} $d_F(A,B)=\|A-B\|_F=\sum_{i,j}(A-B)^2_{ij}$ and the row-averaged \textit{Jensen--Shannon divergence} $\frac{1}{n}\sum_i D_{JS}(A_i||B_i)$ were $A_i, B_i$ are the $i_{th}$ rows of $A,B$ and $D_{JS}(A_i||B_i) = \frac{1}{2}D_{KL}(A_i||M_i) + \frac{1}{2}D_{KL}(B_i||M_i)$ with $M_i = (A_i + B_i)/2$. For $n \times n$ attention maps, the \textit{Frobenius distance} is bounded by $\sqrt{2n}$ ($64$ for our $n=2048$ maps). $D_{JS}$ is theoretically bounded in $[0,\ln 2]$ if measured in nats \cite{lin1991divergence}, where $0$ means equal distributions. For spectral metrics we propose the entropy-based \textit{effective rank} (ER) \cite{roy2007effective} and the \textit{Participation Ratio} (PR) \cite{recanatesi2022scale}.
+We compare attention maps with complementary geometric, probabilistic, and spectral measures. Given two attention matrices $A,B$ and their vectorizations $\vec A, \vec B$, we compared them via \textit{cosine similarity} $\cos(\theta)=\langle \vec A,\vec B\rangle/(\|\vec A\|_2\|\vec B\|_2)\in[-1,1]$, the \textit{Frobenius distance} $d_F(A,B)=\|A-B\|_F=\sum_{i,j}(A-B)^2_{ij}$ and the row-averaged \textit{Jensen--Shannon divergence} $D_{JS}(A||B)=\frac{1}{n}\sum_i D_{JS}(A_i||B_i)$ were $A_i, B_i$ are the $i_{th}$ rows of $A,B$ and $D_{JS}(A_i||B_i) = \frac{1}{2}D_{KL}(A_i||M_i) + \frac{1}{2}D_{KL}(B_i||M_i)$ with $M_i = (A_i + B_i)/2$. For $n \times n$ attention maps, the \textit{Frobenius distance} is bounded by $\sqrt{2n}$ ($64$ for our $n=2048$ maps). $D_{JS}$ is theoretically bounded in $[0,\ln 2]$ if measured in nats \cite{lin1991divergence}, where $0$ means equal distributions. For spectral metrics we propose the entropy-based \textit{effective rank} (ER) \cite{roy2007effective} and the \textit{Participation Ratio} (PR) \cite{recanatesi2022scale}.
 
 For evaluating explainability methods, we compute aggregate metrics over held-out samples, comparing each student's word-level attribution against the teacher's for every method. Metrics include \textit{Jaccard@$k$} $=|A_k\cap B_k|/|A_k\cup B_k|$, where $A_k,B_k$ are the top-$k$ attributed word sets of two models ($k=10$), \textit{Spearman correlation} of signed scores over the common attributed vocabulary, and deletion-based \textit{faithfulness@$k$} \cite{deyoung2020eraser}, the drop in true-class probability after masking the top-$k$ words (computed per model, including the teacher, as reference). Given \textbf{LIME's} stochastic nature, we also measure \textit{stability} as the Jaccard@10 mean across $5$ re-runs with different seeds.
 
@@ -119,19 +111,29 @@ Table~\ref{tab:perf} reports classification performance and average $D_{KL}$ to 
 \centering
 \caption{Accuracy, F1 and average $D_{KL}$ to the teacher $P$ at $T=1$ and $T=2$ (\textbf{IMDb}: $N=3000$ balanced subset; \textbf{AG News}: full test set). The \textbf{best} and \underline{second best} results are highlighted.}
 \small
-\begin{tabular}{|l|l|c|c|c|c|c|}
-\hline
-Dataset & Model & Acc. & F1 & $D_{KL_{T=1}}$ & $D_{KL_{T=2}}$ \\ \hline
-\textbf{IMDb} & $P$ & $\mathbf{0.954}$ & $\mathbf{0.954}$ & -- & -- \\
-\textbf{IMDb} & $B$ & $0.857$ & $0.857$ & $2.847$ & $1.686$ \\
-\textbf{IMDb} & $S_0$ & $0.813$ & $0.810$ & $\mathbf{0.103}$ & $\underline{0.131}$ \\
-\textbf{IMDb} & $S_1$ & $0.798$ & $0.797$ & $\underline{0.104}$ & $\mathbf{0.127}$ \\
-\textbf{IMDb} & $S_2$ & $\underline{0.867}$ & $\underline{0.867}$ & $0.111$ & $0.192$ \\ \hline
-\textbf{AG News} & $P$ & $0.848$ & $0.847$ & -- & -- \\
-\textbf{AG News} & $B$ & $\mathbf{0.886}$ & $\mathbf{0.886}$ & $2.080$ & $1.784$ \\
-\textbf{AG News} & $S_0$ & $\underline{0.883}$ & $\underline{0.883}$ & $0.629$ & $0.418$ \\
-\textbf{AG News} & $S_1$ & $0.878$ & $0.878$ & $\underline{0.278}$ & $\mathbf{0.228}$ \\
-\textbf{AG News} & $S_2$ & $0.880$ & $0.880$ & $\mathbf{0.247}$ & $\underline{0.246}$ \\ \hline
+\renewcommand{\arraystretch}{0.8}
+\begin{tabular}{lcccc}
+\toprule
+\multirow{2}{*}{Model} & \multirow{2}{*}{Acc.} & \multirow{2}{*}{F1} & \multicolumn{2}{c}{$D_{KL}$} \\
+\cmidrule(lr){4-5}
+ & & & $T=1$ & $T=2$ \\
+\midrule
+\multicolumn{5}{c}{\textbf{IMDb}} \\
+\midrule
+$P$ & $\mathbf{0.954}$ & $\mathbf{0.954}$ & -- & -- \\
+$B$ & $0.857$ & $0.857$ & $2.847$ & $1.686$ \\
+$S_0$ & $0.813$ & $0.810$ & $\mathbf{0.103}$ & $\underline{0.131}$ \\
+$S_1$ & $0.798$ & $0.797$ & $\underline{0.104}$ & $\mathbf{0.127}$ \\
+$S_2$ & $\underline{0.867}$ & $\underline{0.867}$ & $0.111$ & $0.192$ \\
+\midrule
+\multicolumn{5}{c}{\textbf{AG News}} \\
+\midrule
+$P$ & $0.848$ & $0.847$ & -- & -- \\
+$B$ & $\mathbf{0.886}$ & $\mathbf{0.886}$ & $2.080$ & $1.784$ \\
+$S_0$ & $\underline{0.883}$ & $\underline{0.883}$ & $0.629$ & $0.418$ \\
+$S_1$ & $0.878$ & $0.878$ & $\underline{0.278}$ & $\mathbf{0.228}$ \\
+$S_2$ & $0.880$ & $0.880$ & $\mathbf{0.247}$ & $\underline{0.246}$ \\
+\bottomrule
 \end{tabular}
 \label{tab:perf}
 \end{table}
@@ -148,22 +150,29 @@ Table~\ref{tab:explanation_metrics} reports aggregate \textbf{LIME} agreement (v
 \centering
 \caption{Jaccard@10, Spearman $\rho$, and faithfulness@10 vs.\ teacher for \textbf{LIME}, \textbf{SHAP}, and \textbf{Integrated Gradients} (IG, zero baseline), plus \textbf{LIME}-only stability (mean pairwise Jaccard@10 across $5$ seeds, $N=20$), both datasets ($N=100$, $k=10$). The \textbf{best} and \underline{second best} results are highlighted.}
 \footnotesize
-\begin{tabular}{|l|l|c|c|c|c|c|c|c|c|c|c|}
-\hline
-\multirow{2}{*}{Dataset} & \multirow{2}{*}{Model} & \multicolumn{4}{c|}{LIME} & \multicolumn{3}{c|}{SHAP} & \multicolumn{3}{c|}{IG} \\
-\cline{3-12}
- & & Jac.@10 & $\rho$ & Faithf. & Stab. & Jac.@10 & $\rho$ & Faithf. & Jac.@10 & $\rho$ & Faithf. \\ \hline
-\textbf{IMDb} & $P$ & -- & -- & $0.172$ & $0.548$ & -- & -- & $\underline{0.118}$ & -- & -- & $0.010$ \\
-\textbf{IMDb} & $B$ & $\underline{0.183}$ & $\underline{0.248}$ & $0.083$ & $0.587$ & $0.117$ & $0.239$ & $0.025$ & $\underline{0.793}$ & $-0.005$ & $0.010$ \\
-\textbf{IMDb} & $S_0$ & $0.170$ & $0.216$ & $\underline{0.202}$ & $\underline{0.684}$ & $\underline{0.123}$ & $0.238$ & $0.093$ & $0.778$ & $\underline{0.028}$ & $\mathbf{0.085}$ \\
-\textbf{IMDb} & $S_1$ & $0.136$ & $0.189$ & $0.177$ & $0.611$ & $0.096$ & $\underline{0.245}$ & $0.058$ & $\mathbf{0.814}$ & $0.010$ & $\underline{0.025}$ \\
-\textbf{IMDb} & $S_2$ & $\mathbf{0.212}$ & $\mathbf{0.299}$ & $\mathbf{0.267}$ & $\mathbf{0.710}$ & $\mathbf{0.176}$ & $\mathbf{0.333}$ & $\mathbf{0.120}$ & $0.787$ & $\mathbf{0.039}$ & $0.019$ \\
-\hline
-\textbf{AG News} & $P$ & -- & -- & $0.138$ & $\mathbf{0.773}$ & -- & -- & $\mathbf{0.002}$ & -- & -- & $0.053$ \\
-\textbf{AG News} & $B$ & $0.336$ & $\underline{0.321}$ & $0.306$ & $0.668$ & $0.315$ & $\underline{0.269}$ & $-0.002$ & $\mathbf{0.890}$ & $\underline{0.021}$ & $0.067$ \\
-\textbf{AG News} & $S_0$ & $\underline{0.347}$ & $0.279$ & $\underline{0.402}$ & $0.638$ & $\underline{0.317}$ & $\mathbf{0.274}$ & $\underline{0.000}$ & $0.883$ & $\mathbf{0.040}$ & $\underline{0.162}$ \\
-\textbf{AG News} & $S_1$ & $0.341$ & $0.306$ & $0.299$ & $0.614$ & $\mathbf{0.320}$ & $0.267$ & $\underline{0.000}$ & $0.876$ & $-0.036$ & $0.138$ \\
-\textbf{AG News} & $S_2$ & $\mathbf{0.358}$ & $\mathbf{0.342}$ & $\mathbf{0.431}$ & $\underline{0.688}$ & $0.311$ & $0.262$ & $-0.000$ & $\underline{0.888}$ & $0.013$ & $\mathbf{0.340}$ \\ \hline
+\renewcommand{\arraystretch}{0.8}
+\begin{tabular}{lcccccccccc}
+\toprule
+\multirow{2}{*}{Model} & \multicolumn{4}{c}{LIME} & \multicolumn{3}{c}{SHAP} & \multicolumn{3}{c}{IG} \\
+\cmidrule(lr){2-5} \cmidrule(lr){6-8} \cmidrule(lr){9-11}
+ & Jac.@10 & $\rho$ & Faithf. & Stab. & Jac.@10 & $\rho$ & Faithf. & Jac.@10 & $\rho$ & Faithf. \\
+\midrule
+\multicolumn{11}{c}{\textbf{IMDb}} \\
+\midrule
+$P$ & -- & -- & $0.172$ & $0.548$ & -- & -- & $\underline{0.118}$ & -- & -- & $0.010$ \\
+$B$ & $\underline{0.183}$ & $\underline{0.248}$ & $0.083$ & $0.587$ & $0.117$ & $0.239$ & $0.025$ & $\underline{0.793}$ & $-0.005$ & $0.010$ \\
+$S_0$ & $0.170$ & $0.216$ & $\underline{0.202}$ & $\underline{0.684}$ & $\underline{0.123}$ & $0.238$ & $0.093$ & $0.778$ & $\underline{0.028}$ & $\mathbf{0.085}$ \\
+$S_1$ & $0.136$ & $0.189$ & $0.177$ & $0.611$ & $0.096$ & $\underline{0.245}$ & $0.058$ & $\mathbf{0.814}$ & $0.010$ & $\underline{0.025}$ \\
+$S_2$ & $\mathbf{0.212}$ & $\mathbf{0.299}$ & $\mathbf{0.267}$ & $\mathbf{0.710}$ & $\mathbf{0.176}$ & $\mathbf{0.333}$ & $\mathbf{0.120}$ & $0.787$ & $\mathbf{0.039}$ & $0.019$ \\
+\midrule
+\multicolumn{11}{c}{\textbf{AG News}} \\
+\midrule
+$P$ & -- & -- & $0.138$ & $\mathbf{0.773}$ & -- & -- & $\mathbf{0.002}$ & -- & -- & $0.053$ \\
+$B$ & $0.336$ & $\underline{0.321}$ & $0.306$ & $0.668$ & $0.315$ & $\underline{0.269}$ & $-0.002$ & $\mathbf{0.890}$ & $\underline{0.021}$ & $0.067$ \\
+$S_0$ & $\underline{0.347}$ & $0.279$ & $\underline{0.402}$ & $0.638$ & $\underline{0.317}$ & $\mathbf{0.274}$ & $\underline{0.000}$ & $0.883$ & $\mathbf{0.040}$ & $\underline{0.162}$ \\
+$S_1$ & $0.341$ & $0.306$ & $0.299$ & $0.614$ & $\mathbf{0.320}$ & $0.267$ & $\underline{0.000}$ & $0.876$ & $-0.036$ & $0.138$ \\
+$S_2$ & $\mathbf{0.358}$ & $\mathbf{0.342}$ & $\mathbf{0.431}$ & $\underline{0.688}$ & $0.311$ & $0.262$ & $-0.000$ & $\underline{0.888}$ & $0.013$ & $\mathbf{0.340}$ \\
+\bottomrule
 \end{tabular}
 \label{tab:explanation_metrics}
 \end{table*}
@@ -187,7 +196,7 @@ $PR$ values of $P_{avg}$ remain close to $1$ in both datasets for all layers, wh
 \begin{figure*}[tb]
 \centering
 \includegraphics[width=\textwidth]{../images/teacher_avg_comparison_grid.png}
-\caption{Cosine similarity, Frobenius distance, $D_{JS}$, $PR$, and $ER$ vs.\ teacher $P_{avg}$ across all $11$ layers, both datasets ($B$, $S_0$, $S_1$, $S_2$; rows: \textbf{IMDb}, \textbf{AG News}).}
+\caption{\textit{Cosine similarity}, \textit{Frobenius distance}, row-averaged \textit{Jensen--Shannon divergence} ($D_{JS}$), Participation Ratio ($PR$), and Entropy Rank ($ER$) between each model's attention maps and the teacher's $P_{avg}$, both averaged over the test set (following $P_{avg_i} = (P_{2i}+P_{2i+1})/2$ for layer $i$ from teacher model $P$), for the non-distilled baseline ($B$) and the distilled students ($S_0$, $S_1$, $S_2$), on both datasets \textbf{IMDb} and \textbf{AG News}.}
 \label{fig:teacher_avg_comparison_grid}
 \end{figure*}
 
@@ -207,7 +216,7 @@ This work investigated whether functional similarity induced by knowledge distil
 
 On explanatory mechanisms, the dissociation is clearest on \textbf{IMDb}: $S_1$ reproduces the teacher's output distribution more faithfully than $S_2$ (lower $D_{KL}$), yet is markedly \emph{less} \textbf{LIME}/\textbf{SHAP}-aligned with the teacher -- the opposite of what a distillation-driven account predicts. Every student, including the non-distilled $B$, assigns importance to tokens with no topical or sentiment content regardless of its distillation weight, so this failure to transfer explanatory mechanisms cannot be attributed to insufficient distillation strength either.
 
-A striking pattern underlies the representational side of this: $B$, $S_0$, $S_1$, and $S_2$ are largely indistinguishable from one another on most metrics -- not because their attention structures are shown to be similar, but because no metric separates them consistently across both datasets, despite spanning $\alpha$ from $0.5$ to $1$. $D_{JS}$ is the one exception, consistently ranking $B$ as the most divergent from the teacher on both datasets. Since $B$ receives no distillation signal at all, this near-uniformity cannot be attributed to distillation; a natural next step is a student trained with \emph{pure} distillation ($\alpha=0$, no cross-entropy term), which would help disentangle cross-entropy training over the shared dataset from distillation itself as the source of this convergence.
+A striking pattern underlies the representational side of this: $B$, $S_0$, $S_1$, and $S_2$ are largely indistinguishable from one another on most metrics -- not because their attention structures are shown to be similar, but because no metric separates them consistently across both datasets, despite spanning $\alpha$ from $0.5$ to $1$. $D_{JS}$ is the one exception, consistently ranking $B$ as the most divergent from the teacher on both datasets. Since $B$ receives no distillation signal at all, this near-uniformity cannot be attributed to distillation; a natural next step is a student trained with \emph{pure} distillation, which would help disentangle cross-entropy training over the shared dataset from distillation itself as the source of this convergence.
 
 \section*{Acknowledgment}
 
