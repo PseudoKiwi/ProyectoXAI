@@ -111,7 +111,7 @@ Table~\ref{tab:perf} reports classification performance and average $D_{KL}$ to 
 \centering
 \caption{Accuracy, F1 and average $D_{KL}$ to the teacher $P$ at $T=1$ and $T=2$ (\textbf{IMDb}: $N=3000$ balanced subset; \textbf{AG News}: full test set). The \textbf{best} and \underline{second best} results are highlighted.}
 \small
-\renewcommand{\arraystretch}{0.8}
+\renewcommand{\arraystretch}{0.85}
 \begin{tabular}{lcccc}
 \toprule
 \multirow{2}{*}{Model} & \multirow{2}{*}{Acc.} & \multirow{2}{*}{F1} & \multicolumn{2}{c}{$D_{KL}$} \\
@@ -150,7 +150,7 @@ Table~\ref{tab:explanation_metrics} reports aggregate \textbf{LIME} agreement (v
 \centering
 \caption{Jaccard@10, Spearman $\rho$, and faithfulness@10 vs.\ teacher for \textbf{LIME}, \textbf{SHAP}, and \textbf{Integrated Gradients} (IG, zero baseline), plus \textbf{LIME}-only stability (mean pairwise Jaccard@10 across $5$ seeds, $N=20$), both datasets ($N=100$, $k=10$). The \textbf{best} and \underline{second best} results are highlighted.}
 \footnotesize
-\renewcommand{\arraystretch}{0.8}
+\renewcommand{\arraystretch}{0.85}
 \begin{tabular}{lcccccccccc}
 \toprule
 \multirow{2}{*}{Model} & \multicolumn{4}{c}{LIME} & \multicolumn{3}{c}{SHAP} & \multicolumn{3}{c}{IG} \\
