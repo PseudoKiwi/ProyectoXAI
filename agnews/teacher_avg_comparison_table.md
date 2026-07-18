@@ -3,8 +3,10 @@
 Cosine similarity, Frobenius distance, Jensen–Shannon divergence, participation ratio, and
 entropy-based effective rank between each model's attention map and the teacher's averaged
 attention $P_{avg}$, across layers $i$. Source: `agnews/model_representational_comparisons.ipynb`
-(cells 21-39, 65-66). Rollout-based comparisons and student-student comparisons are excluded.
-For Teacher $P_{avg}$ itself, cosine/Frobenius/JS are not applicable (self-reference).
+(cells 21-39, 65-66). Pure Student (S3) rows are sourced from
+`agnews/pure_s_representational_comparisons.ipynb` (cells 22-26). Rollout-based comparisons and
+student-student comparisons are excluded. For Teacher $P_{avg}$ itself, cosine/Frobenius/JS are
+not applicable (self-reference).
 
 | Model | Layer $i$ | Cosine Similarity | Frobenius Distance | $D_{JS}$ | PR | ER |
 |---|---|---|---|---|---|---|
@@ -63,3 +65,14 @@ For Teacher $P_{avg}$ itself, cosine/Frobenius/JS are not applicable (self-refer
 | Student Local | 8 | 0.3127 | 18.0979 | 0.2427 | 1.5854 | 40.2886 |
 | Student Local | 9 | 0.2929 | 18.5798 | 0.2603 | 1.9755 | 51.9470 |
 | Student Local | 10 | 0.2640 | 19.6215 | 0.2528 | 1.7652 | 42.6021 |
+| Pure Student | 0 | 0.9654 | 1.4653 | 0.0099 | 1.3602 | 16.7108 |
+| Pure Student | 1 | 0.7895 | 15.9952 | 0.0874 | 1.2391 | 13.1758 |
+| Pure Student | 2 | 0.7540 | 28.2156 | 0.2248 | 1.1410 | 7.3812 |
+| Pure Student | 3 | 0.7656 | 32.7230 | 0.2982 | 1.1839 | 12.1525 |
+| Pure Student | 4 | 0.6373 | 17.5895 | 0.1389 | 1.2812 | 20.6470 |
+| Pure Student | 5 | 0.6795 | 17.7023 | 0.1806 | 1.3476 | 25.9201 |
+| Pure Student | 6 | 0.5321 | 15.9558 | 0.1768 | 1.5875 | 34.1161 |
+| Pure Student | 7 | 0.5364 | 15.7315 | 0.2016 | 1.7431 | 42.6126 |
+| Pure Student | 8 | 0.6566 | 15.8977 | 0.1933 | 1.4694 | 36.6744 |
+| Pure Student | 9 | 0.5440 | 17.0116 | 0.2190 | 1.6544 | 35.6647 |
+| Pure Student | 10 | 0.5036 | 18.1459 | 0.2170 | 1.8504 | 41.3742 |
